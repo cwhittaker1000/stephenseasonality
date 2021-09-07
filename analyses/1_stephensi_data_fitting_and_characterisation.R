@@ -9,7 +9,7 @@ library(deSolve); library(parallel); library(matlib); library(matlab); library(p
 library(rstan); library(ggplot2); library(invgamma); library(tictoc); library(DescTools)
 
 # Load functions
-source(here("functions", "utils.R"))
+source(here("functions", "functions/time_series_characterisation_functions.R"))
 source(here("functions", "gp_fitting_functions.R"))
 
 # Loading in extracted stephensi data and renaming variables
