@@ -1,43 +1,64 @@
 # See https://github.com/r-spatial/rgee for more details about installation and getting things working
 
 # Load required libraries
-library(tidyverse); library(rgee); library(sf); library(raster); library(reticulate)
+library(tidyverse); library(rgee); library(sf); library(raster); library(reticulate); library(here)
 
 # Initialise rgee
 ee_Initialize()
 
-adm1data <- getData('GADM', country = 'IND', level = 1)
-example <- adm1data[11, ]
+# Load metadata and admin 2 units
+metadata <- readRDS(here("data", "processed", "metadata_and_processed_counts.rds"))
+admin2 <- readRDS(here("data", "processed", "simplified_admin2.rds"))
 
-test <- st_as_sf(example)
+# Extracting CHIRPS rainfall data
+for (i in 1:nrow(metadata)) {
+  
+  # Get years that the study spans
+  years <- seq(metadata$start[i], metadata$end[i], 1)
+  num_years <- length(years)
+  for (j in 1:length(years)) {
+    if (years[j] < 1981) {
+      years[j] <- 1981
+    }
+  }
+  years <- unique(years)
+  start_date <- paste0(years[1], "-01-01")
+  end_date <- paste0(years[length(years)] + 1, "-01-01")
+  
+  # Get relevant admin 2 unit and convert to sf object
+  metadata_admin_2 <- metadata$admin2[i]
+  admin_2_data <- admin2[admin2$NAME_2 == metadata_admin_2, ]
+  admin_2_geometry <- st_as_sf(admin_2_data)
 
-nc <- st_read(system.file("shape/nc.shp", package = "sf"), quiet = TRUE)
+  # Extract rainfall for that location
+  chirps <- ee$ImageCollection("UCSB-CHG/CHIRPS/DAILY") %>%
+    ee$ImageCollection$filterDate(start_date, end_date) %>%
+    ee$ImageCollection$map(function(x) x$select("precipitation")) %>% # Select only precipitation bands
+    ee$ImageCollection$toBands() # from imagecollection to image
+  chirps_extract <- ee_extract(x = chirps, y = admin_2_geometry, sf = FALSE)
+  
+  # Process rainfall into right format
+  first_rainfall_entry <- min(grep("precipitation", colnames(chirps_extract)))
+  x <- chirps_extract %>%
+    pivot_longer(cols = starts_with("X"), names_to = "day", values_to = "rainfall")
+  x$day <- gsub("X", "", x$day)
+  x$day <- gsub("_precipitation", "", x$day)
+  x$day <- as.Date(x$day, format = "%Y%m%d")
+  x$daymonth_id <- format(x$day, "%m-%d")
+  days <- x$day
+  x <- x %>%
+    group_by(daymonth_id) %>%
+    summarise(rainfall = mean(rainfall, na.rm = TRUE))
+  x$day <- days[1:nrow(x)]
+  
+  
+}
 
-terraclimate <- ee$ImageCollection("UCSB-CHG/CHIRPS/DAILY") %>%
-  ee$ImageCollection$filterDate("2001-01-01", "2002-01-01") %>%
-  ee$ImageCollection$map(function(x) x$select("precipitation")) %>% # Select only precipitation bands
-  ee$ImageCollection$toBands() # from imagecollection to image
 
-ee_nc_rain <- ee_extract(x = terraclimate, y = nc[1, "NAME"], sf = FALSE)
-ee_nc_rain <- ee_extract(x = terraclimate, y = test, sf = FALSE)
-
-x <- ee_nc_rain %>%
-  pivot_longer(-NAME, names_to = "day", values_to = "pr")
-
-x <- ee_nc_rain %>%
-  pivot_longer(X20010101_precipitation:X20011231_precipitation, names_to = "day", values_to = "pr")
-
-
-x$day <- gsub("X", "", x$day)
-x$day <- gsub("_precipitation", "", x$day)
-x$day <- as.Date(x$day, format = "%Y%m%d")
-
-ggplot(x, aes(x = day, y = pr, color = pr)) +
+ggplot(x, aes(x = day, y = rainfall, color = rainfall)) +
   geom_line(alpha = 0.4) +
   xlab("Month") +
   ylab("Precipitation (mm)") +
   theme_minimal()
-
-
 
                
