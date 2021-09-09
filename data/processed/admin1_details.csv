@@ -1,0 +1,154 @@
+"country","admin1","id","type","alt_names"
+"Afghanistan","Badakhshan","AFG.1_1","Velayat","Badahšan"
+"Afghanistan","Badghis","AFG.2_1","Velayat","Badghes|Badghisat|Badgis"
+"Afghanistan","Baghlan","AFG.3_1","Velayat","Baglan|Bughlan"
+"Afghanistan","Balkh","AFG.4_1","Velayat","Balh|Mazar-i-Sharif|Mazar"
+"Afghanistan","Bamyan","AFG.5_1","Velayat",NA
+"Afghanistan","Daykundi","AFG.6_1","Velayat",NA
+"Afghanistan","Farah","AFG.7_1","Velayat",NA
+"Afghanistan","Faryab","AFG.8_1","Velayat","Fariab|Maimana|Meymaneh"
+"Afghanistan","Ghazni","AFG.9_1","Velayat","Gazni"
+"Afghanistan","Ghor","AFG.10_1","Velayat","Gawr|Ghore|Ghour|Ghur"
+"Afghanistan","Hilmand","AFG.11_1","Velayat","Girishk|Hilmend"
+"Afghanistan","Hirat","AFG.12_1","Velayat",NA
+"Afghanistan","Jawzjan","AFG.13_1","Velayat","Jaozjan|Jozjan|Juzjan|Jouzjan|Shibarghan"
+"Afghanistan","Kabul","AFG.14_1","Velayat","Cabul|Kabol|Kaboul"
+"Afghanistan","Kandahar","AFG.15_1","Velayat","Qandahar"
+"Afghanistan","Kapisa","AFG.16_1","Velayat","Kapesa"
+"Afghanistan","Khost","AFG.17_1","Velayat",NA
+"Afghanistan","Kunar","AFG.18_1","Velayat","Konarha|Kunarha"
+"Afghanistan","Kunduz","AFG.19_1","Velayat","Kondoz|Qonduz|Qunduz"
+"Afghanistan","Laghman","AFG.20_1","Velayat","Lagman"
+"Afghanistan","Logar","AFG.21_1","Velayat","Lawghar|Loghar"
+"Afghanistan","Nangarhar","AFG.22_1","Velayat","Ningrahar|Eastern Province"
+"Afghanistan","Nimroz","AFG.23_1","Velayat","Neemroze|Nimrod|Nimrooz|Nimroze|Chakhansur"
+"Afghanistan","Nuristan","AFG.24_1","Velayat","Nooristan|Nuristão"
+"Afghanistan","Paktika","AFG.25_1","Velayat","Paktiya|Paktya|Southern Province"
+"Afghanistan","Paktya","AFG.26_1","Velayat","Paktiya|Southern Province"
+"Afghanistan","Panjshir","AFG.27_1","Velayat",NA
+"Afghanistan","Parwan","AFG.28_1","Velayat","Charikar"
+"Afghanistan","Samangan","AFG.29_1","Velayat",NA
+"Afghanistan","Sari Pul","AFG.30_1","Velayat","Sar-e Pul|Saripol"
+"Afghanistan","Takhar","AFG.31_1","Velayat","Takar"
+"Afghanistan","Uruzgan","AFG.32_1","Velayat","Urozgan"
+"Afghanistan","Wardak","AFG.33_1","Velayat","Verdak|Wardag|Maiden"
+"Afghanistan","Zabul","AFG.34_1","Velayat","Zubul|Zaboul"
+"Djibouti","Ali Sabieh","DJI.1_1","Region","`Ali Sabîh"
+"Djibouti","Dikhil","DJI.2_1","Region","Dikkil"
+"Djibouti","Djibouti","DJI.3_1","City",NA
+"Djibouti","Obock","DJI.4_1","Region",NA
+"Djibouti","Tadjourah","DJI.5_1","Region","Tadjoura"
+"Ethiopia","Addis Abeba","ETH.1_1","Astedader","Addis Ababa|Addis Ababa|Adis-Abeba|Adis Abeba"
+"Ethiopia","Afar","ETH.2_1","Kilil"," "
+"Ethiopia","Amhara","ETH.3_1","Kilil","Amara"
+"Ethiopia","Benshangul-Gumaz","ETH.4_1","Kilil","Beneshangul Gumu"
+"Ethiopia","Dire Dawa","ETH.5_1","Astedader"," "
+"Ethiopia","Gambela Peoples","ETH.6_1","Kilil","Gambela"
+"Ethiopia","Harari People","ETH.7_1","Kilil","Hareri"
+"Ethiopia","Oromia","ETH.8_1","Kilil","Oromiya"
+"Ethiopia","Somali","ETH.9_1","Kilil","Sumale"
+"Ethiopia","Southern Nations, Nationalities and Peoples","ETH.10_1","Kilil","SNNPR"
+"Ethiopia","Tigray","ETH.11_1","Kilil","Tegré|Tigrai|Tigre"
+"India","Andaman and Nicobar","IND.1_1","Union Territor","Andaman & Nicobar Islands|Andaman et Nicobar|Iihas de Andama e Nicobar|Inseln Andamanen und Nikobare"
+"India","Andhra Pradesh","IND.2_1","State",NA
+"India","Arunachal Pradesh","IND.3_1","State","Agence de la Frontière du Nord-Est(French-obsolete)|North East Frontier Agency"
+"India","Assam","IND.4_1","State",NA
+"India","Bihar","IND.5_1","State",NA
+"India","Chandigarh","IND.6_1","Union Territor",NA
+"India","Chhattisgarh","IND.7_1","State",NA
+"India","Dadra and Nagar Haveli","IND.8_1","Union Territor","DAdra et Nagar Haveli|Dadra e Nagar Haveli"
+"India","Daman and Diu","IND.9_1","Union Territor",NA
+"India","Goa","IND.10_1","State","Gôa"
+"India","Gujarat","IND.11_1","State","Goudjerate|Gujerat|Gujerate"
+"India","Haryana","IND.12_1","State",NA
+"India","Himachal Pradesh","IND.13_1","Union Territor",NA
+"India","Jammu and Kashmir","IND.14_1","State",NA
+"India","Jharkhand","IND.15_1","State","Vananchal"
+"India","Karnataka","IND.16_1","State","Maisur|Mysore"
+"India","Kerala","IND.17_1","State",NA
+"India","Lakshadweep","IND.18_1","Union Territor","Íles Laquedives|Laccadive|Minicoy and Amindivi Islands|Laccadives|Lackadiverna|Lakkadiven|Lakkadi"
+"India","Madhya Pradesh","IND.19_1","State",NA
+"India","Maharashtra","IND.20_1","State",NA
+"India","Manipur","IND.21_1","State",NA
+"India","Meghalaya","IND.22_1","State",NA
+"India","Mizoram","IND.23_1","State",NA
+"India","Nagaland","IND.24_1","State",NA
+"India","NCT of Delhi","IND.25_1","Union Territor",NA
+"India","Odisha","IND.26_1","State",NA
+"India","Puducherry","IND.27_1","Union Territor","Pondicherry|Puduchcheri|Pondichéry"
+"India","Punjab","IND.28_1","State",NA
+"India","Rajasthan","IND.29_1","State","Greater Rajasthan|Rajputana"
+"India","Sikkim","IND.30_1","State",NA
+"India","Tamil Nadu","IND.31_1","State","Madras|Tamilnad"
+"India","Telangana","IND.32_1","State",NA
+"India","Tripura","IND.33_1","State",NA
+"India","Uttar Pradesh","IND.34_1","State","United Provinces"
+"India","Uttarakhand","IND.35_1","State","Uttarakhand"
+"India","West Bengal","IND.36_1","State","Bangla|Bengala Occidentale|Bengala Ocidental|Bengale occidental"
+"Iran","Alborz","IRN.1_1","Ostan",NA
+"Iran","Ardebil","IRN.2_1","Ostan","Ardabil"
+"Iran","Bushehr","IRN.3_1","Ostan","Banader va Jazayer-e Khalij-e Fars|Bushire|Persian Gulf|Ports and Islands of the Persian Gulf"
+"Iran","Chahar Mahall and Bakhtiari","IRN.4_1","Ostan","Bakhtiari|Chaharmahal va Bakhtiyari|Charmahal-Bakhtiyari"
+"Iran","East Azarbaijan","IRN.5_1","Ostan","Azarbayjan-e Khavari|Azarbaijan-e Sharghi|Azarbaijan-Sharqi|East Azarbayejan|Azerba‹djan e Sharqi"
+"Iran","Esfahan","IRN.6_1","Ostan","Isfahan|Ispahan"
+"Iran","Fars","IRN.7_1","Ostan",NA
+"Iran","Gilan","IRN.8_1","Ostan",NA
+"Iran","Golestan","IRN.9_1","Ostan",NA
+"Iran","Hamadan","IRN.10_1","Ostan","Hamedan"
+"Iran","Hormozgan","IRN.11_1","Ostan","Banader va Jazayer-e Bahr-e Oman|Ports and Islands of the Sea of Oman|Saheli"
+"Iran","Ilam","IRN.12_1","Ostan","Ilam and Poshtkuh"
+"Iran","Kerman","IRN.13_1","Ostan",NA
+"Iran","Kermanshah","IRN.14_1","Ostan","Bakhtaran|Kermanshahan"
+"Iran","Khuzestan","IRN.15_1","Ostan","Khuzistan|Kouzistan"
+"Iran","Kohgiluyeh and Buyer Ahmad","IRN.16_1","Ostan","Bovir Ahmadi and Kohkiluyeh|Boyer-Ahmad and Koh-Giluye|Boyer Ahmad e Kohkiluyeh|Boyer Ahmadi-ye Sardir va Kohkiluyeh|Kohgil"
+"Iran","Kordestan","IRN.17_1","Ostan","Kurdistan"
+"Iran","Lorestan","IRN.18_1","Ostan",NA
+"Iran","Markazi","IRN.19_1","Ostan",NA
+"Iran","Mazandaran","IRN.20_1","Ostan",NA
+"Iran","North Khorasan","IRN.21_1","Ostan","Khorasan-e Shemali"
+"Iran","Qazvin","IRN.22_1","Ostan",NA
+"Iran","Qom","IRN.23_1","Ostan",NA
+"Iran","Razavi Khorasan","IRN.24_1","Ostan","Khorasan-e Razavi"
+"Iran","Semnan","IRN.25_1","Ostan",NA
+"Iran","Sistan and Baluchestan","IRN.26_1","Ostan","Baluchestan va Sistan|Seistan and Baluchistan|Sistan e Baloutchistan"
+"Iran","South Khorasan","IRN.27_1","Ostan","Khorasan-e Janubi"
+"Iran","Tehran","IRN.28_1","Ostan","Teheran"
+"Iran","West Azarbaijan","IRN.29_1","Ostan","Azarbayjan-e Bakhtari|Azarbaijan-e Gharbi|West Azarbayejan|Azerba‹djan e Gharbi"
+"Iran","Yazd","IRN.30_1","Ostan",NA
+"Iran","Zanjan","IRN.31_1","Ostan",NA
+"Myanmar","Ayeyarwady","MMR.1_1","Yin","Irrawaddy|Ayeyarwaddy|Ayeyawady|Irawadi|Irraouaddi|Irrauaddy"
+"Myanmar","Bago","MMR.2_1","Yin","Pégou|Pegu"
+"Myanmar","Chin","MMR.3_1","Pyine","Chin Hills"
+"Myanmar","Kachin","MMR.4_1","Pyine","Jingphaw Mungdaw"
+"Myanmar","Kayah","MMR.5_1","Pyine","Karenni"
+"Myanmar","Kayin","MMR.6_1","Pyine","Kawthulei|Karen|Karin|Kawthoolei|Kawthulay"
+"Myanmar","Magway","MMR.7_1","Yin","Magwe|Minbu"
+"Myanmar","Mandalay","MMR.8_1","Yin",NA
+"Myanmar","Mon","MMR.9_1","Pyine","Mun"
+"Myanmar","Naypyitaw","MMR.10_1","Union territory","Naypyidaw|Nay Pyi Taw"
+"Myanmar","Rakhine","MMR.11_1","Pyine","Arakan"
+"Myanmar","Sagaing","MMR.12_1","Yin",NA
+"Myanmar","Shan","MMR.13_1","Pyine",NA
+"Myanmar","Tanintharyi","MMR.14_1","Yin","Tenasserim|Thanintharyi"
+"Myanmar","Yangon","MMR.15_1","Yin","Rangoon|Rangum|Rangun|Rang£n"
+"Pakistan","Azad Kashmir","PAK.1_1","Centrally Administered Area","Kashmir"
+"Pakistan","Baluchistan","PAK.2_1","Province","Balochistan|BéloutchistanBeluchistan|Baluchistão"
+"Pakistan","F.A.T.A.","PAK.3_1","Territory","Federally Administered Tribal Areas"
+"Pakistan","F.C.T.","PAK.4_1","Capital Territory","Islamabad|Federal Capital Territory|Federal Capital Territory Islamabad|Territoire de la Capitale fédérale"
+"Pakistan","N.W.F.P.","PAK.5_1","Province","North-West Frontier Province"
+"Pakistan","Northern Areas","PAK.6_1","Centrally Administered Area",NA
+"Pakistan","Punjab","PAK.7_1","Province","Pendjab|Penjab"
+"Pakistan","Sind","PAK.8_1","Province","Sindh"
+"Saudi Arabia","`Asir","SAU.1_1","Emirate|Mintaqah","Asir|Aseer|Assyear"
+"Saudi Arabia","Al Bahah","SAU.2_1","Emirate|Mintaqah","Baha"
+"Saudi Arabia","Al Hudud ash Shamaliyah","SAU.3_1","Emirate|Mintaqah","Northern Frontier"
+"Saudi Arabia","Al Jawf","SAU.4_1","Emirate|Mintaqah","JawfAl Joaf|Al-Jouf|Jowf"
+"Saudi Arabia","Al Madinah","SAU.5_1","Emirate|Mintaqah","Madinah|Al Madinah al Munawwarah|Monwarah|Medina|Médine"
+"Saudi Arabia","Al Quassim","SAU.6_1","Emirate|Mintaqah","Al Gassim|Gasim|Qaseem|Al Qasseem"
+"Saudi Arabia","Ar Riyad","SAU.7_1","Emirate|Mintaqah","Riyad|Riad|Riyadh"
+"Saudi Arabia","Ash Sharqiyah","SAU.8_1","Emirate|Mintaqah","Eastern Province"
+"Saudi Arabia","Ha'il","SAU.9_1","Emirate|Mintaqah","Hail"
+"Saudi Arabia","Jizan","SAU.10_1","Emirate|Mintaqah","Jazan|Qizan"
+"Saudi Arabia","Makkah","SAU.11_1","Emirate|Mintaqah","La Meca|La Mecca|La Mecque|Makka|Makkah al-Mukarramah|Mecca|Meca|Mecka|Mekka"
+"Saudi Arabia","Najran","SAU.12_1","Emirate|Mintaqah",NA
+"Saudi Arabia","Tabuk","SAU.13_1","Emirate|Mintaqah","Tabouk"

@@ -49,7 +49,7 @@ admin2 <- readRDS(here("data", "raw", "raw_gadm_shapefiles/", "level2.rds"))
 admin2 <- admin2[!is.na(admin2$NAME_0), ]
 countries <- c("Afghanistan", "Djibouti", "Ethiopia", "India",  "Iran", "Myanmar", "Pakistan", "Saudi Arabia")
 admin2 <- admin2[admin2$NAME_0 %in% countries, ]
-saveRDS(admin1, here("data", "processed", "complex_admin2.rds"))
+saveRDS(admin2, here("data", "processed", "complex_admin2.rds"))
 #samples <- sample(seq(1:1447), 100)
 #samples <- samples[order(samples)]
 for (i in 1:nrow(admin2)) {
@@ -64,7 +64,7 @@ for (i in 1:nrow(admin2)) {
   admin2$geometry[i] <- reduce
   print(i)
 }
-saveRDS(admin1, here("data", "processed", "simplified_admin2.rds"))
+saveRDS(admin2, here("data", "processed", "simplified_admin2.rds"))
 
 # Checking everything has worked okay
 complex_admin_0 <- readRDS(here("data", "processed", "complex_admin0.rds"))
@@ -82,3 +82,14 @@ simple_admin_2 <- readRDS(here("data", "processed", "simplified_admin2.rds"))
 plot(complex_admin_2$geometry[10])
 plot(simple_admin_2$geometry[10], add = TRUE, type = "l", col = "red")
 
+# Saving Admin 1 and Admin2 unit names for each country to assist with geolocation
+admin1_csv <- data.frame(country = simple_admin_1$NAME_0, admin1 = simple_admin_1$NAME_1, 
+                         id = simple_admin_1$GID_1, type = simple_admin_1$TYPE_1, alt_names = simple_admin_1$VARNAME_1)
+
+admin2_csv <- data.frame(country = simple_admin_2$NAME_0, 
+                         admin1 = simple_admin_2$NAME_1, id1 = simple_admin_2$GID_1,
+                         admin2 = simple_admin_2$NAME_2, id2 = simple_admin_2$GID_2,
+                         type = simple_admin_2$TYPE_2, alt_names = simple_admin_2$VARNAME_2)
+
+write.csv(admin1_csv, file = here("data", "processed", "admin1_details.csv"), row.names = FALSE)
+write.csv(admin2_csv, file = here("data", "processed", "admin2_details.csv"), row.names = FALSE)
