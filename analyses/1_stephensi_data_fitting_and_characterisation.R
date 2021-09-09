@@ -99,7 +99,7 @@ metadata <- raw_df[retain_index, ] %>%
          start = Year.Start, end = Year.End)
 overall <- cbind(metadata, new_df[retain_index, ])
 colnames(overall)[8:19] <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-
+saveRDS(overall, file = here("data", "processed", "metadata_and_processed_counts.rds"))
 table(metadata$country)  
 table(metadata$city)  
 
