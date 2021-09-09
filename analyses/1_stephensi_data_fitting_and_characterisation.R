@@ -9,12 +9,12 @@ library(deSolve); library(parallel); library(matlib); library(matlab); library(p
 library(rstan); library(ggplot2); library(invgamma); library(tictoc); library(DescTools)
 
 # Load functions
-source(here("functions", "functions/time_series_characterisation_functions.R"))
+source(here("functions", "time_series_characterisation_functions.R"))
 source(here("functions", "gp_fitting_functions.R"))
 
 # Loading in extracted stephensi data and renaming variables
-df <- read.csv(file = here("data", "raw", "extracted_data.csv"), stringsAsFactors = FALSE)
-df <- df[1:85, ] %>%
+raw_df <- read.csv(file = here("data", "raw", "extracted_data.csv"), stringsAsFactors = FALSE)
+df <- raw_df[1:85, ] %>%
   select(Time.Series.ID, Multiply.By., Month_Start, `Jan`:`Dec.4`) %>%
   rename(id = Time.Series.ID, multiply = Multiply.By., start = Month_Start) %>%
   mutate(multiply = as.numeric(multiply))
@@ -93,6 +93,17 @@ for (i in retain_index) {
   browser()
 }
 
+metadata <- raw_df[retain_index, ] %>%
+  select(Time.Series.ID, Country, Admin.1, Admin.2, City., Year.Start, Year.End) %>%
+  rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2, city = City., 
+         start = Year.Start, end = Year.End)
+overall <- cbind(metadata, new_df[retain_index, ])
+colnames(overall)[8:19] <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+table(metadata$country)  
+table(metadata$city)  
+
+
 #######################################################################################################
 ##                                                                                                   ##
 ##                               Time-Series Property Characterisation                               ##
@@ -128,8 +139,8 @@ for (i in 1:length(retain_index)) {
   mean_realisation[i, ] <- negbinom_intensity_mean
   
   # Fitting 1 and 2 component Von Mises distributions to the smoothed data
-  normalised_output <- normalise_total(negbinom_intensity_mean)
-  norm_output <- normalised_output/AUC(2*pi*ordered_timepoints/length(ordered_timepoints), normalised_output) # normalising so AUC sums to 1
+  normed_output <- normalise_total(negbinom_intensity_mean)
+  norm_output <- normed_output/AUC(2*pi*ordered_timepoints/length(ordered_timepoints), normed_output) # normalising so AUC sums to 1
   von_mises_params <- von_mises_fitting(norm_output, TRUE)
   diff <- as.numeric(abs(von_mises_params["2_1_Mean"] - von_mises_params["2_2_Mean"]))
   weight_temp <- as.numeric(von_mises_params["2_W"])
@@ -191,7 +202,7 @@ par(mfrow = c(2, 2))
 for (i in 1:num_clust) {
   cluster <- normalised_output[clustering_results$cluster == i, ]
   max <- max(cluster)
-  plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", ylim = c(0, 15), lwd = 2, col = colours[i], 
+  plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", ylim = c(0, 10), lwd = 2, col = colours[i], 
        las = 1, xaxt = "n", xlab = "", ylab = "")
   for (j in 1:length(cluster[, 1])) {
     lines(timepoints, cluster[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
@@ -205,17 +216,24 @@ plot(PCA_output[, 2], PCA_output[, 1], col = clustering_results$cluster, pch = 2
 clusters <- as.character(seq(1:num_clust))
 legend("bottomright", as.character(seq(1:num_clust)), cex = 1.5, col = palette()[1:num_clust], pch = 20)
 
-
-plot(normalised_output[4, ])
-
-
-
-
-prop_exp <- PCA$sdev^2/sum(PCA$sdev^2)
-plot(seq(1, 7, 1), prop_exp, ylab = "% Variance Explained", xlab = "PCA Component", las = 1)
-lines(seq(1, 7, 1), prop_exp)
-points(seq(1, 7, 1), prop_exp, pch = 20)
-
-par(mfrow = c(1, 1), mar = c(3, 3, 3, 3))
-plot(PCA_output[, 2], PCA_output[, 1], pch = 20, xlab = "PCA Comp 2 (20%)", ylab = "PCA Comp 1 (55%)", cex = 2)
-
+# Visualising the time-series belonging to urban/rural
+urban_rural <- overall$city
+tab <- table(clustering_results$cluster, urban_rural)
+tab <- tab[, 2:3]
+chisq.test(tab)
+table(features[, "peaks"], urban_rural)
+colours <- palette()[1:2]
+timepoints <- seq(0, 12, length = dim(normalised_output)[2])
+locs <- c("Urban", "Rural")
+par(mfrow = c(1, 2))
+for (i in 1:2) {
+  set <- normalised_output[urban_rural == locs[i], ]
+  max <- max(set)
+  plot(timepoints, apply(set, 2, mean) * 100, type = "l", ylim = c(0, 10), lwd = 2, col = colours[i], 
+       las = 1, xaxt = "n", xlab = "", ylab = "")
+  for (j in 1:length(set[, 1])) {
+    lines(timepoints, set[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
+  }
+  number_time_series <- length(set[, 1])
+  text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
+}
