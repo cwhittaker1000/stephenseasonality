@@ -9,8 +9,11 @@ library(tidyverse); library(here)
 # Loading in admin 0 units, simplifying and saving
 admin0 <- readRDS(here("data", "raw", "raw_gadm_shapefiles", "level0.rds"))
 admin0 <- admin0[!is.na(admin0$NAME_0), ]
-countries <- c("Afghanistan", "Bangladesh", "Bhutan", "Djibouti", "Egypt", "Ethiopia", "India", "Israel", "Iraq", "Iran", "Jordan", "Kenya", 
-               "Lebanon", "Myanmar", "Nepal", "Oman", "Pakistan", "Saudi Arabia", "Somalia", "South Sudan", "Sudan", "Yemen")
+countries <- c("Afghanistan", "Armenia", "Azerbaijan", "Bangladesh", "Bhutan", "Cambodia", "China", "Djibouti", "Egypt", 
+               "Ethiopia", "India", "Israel", "Iraq", "Iran", "Jordan", "Kenya", "Kyrgyzstan",
+               "Laos", "Lebanon", "Myanmar", "Nepal", "Oman", "Pakistan", "Saudi Arabia", 
+               "Somalia", "South Sudan", "Sudan", "Syria", "Tajikistan", "Thailand", "Turkey", "Turkmenistan", "Uzbekistan",
+               "Vietnam", "Yemen")
 admin0 <- admin0[admin0$NAME_0 %in% countries, ]
 saveRDS(admin0, here("data", "processed", "complex_admin0.rds"))
 for (i in 1:nrow(admin0)) {

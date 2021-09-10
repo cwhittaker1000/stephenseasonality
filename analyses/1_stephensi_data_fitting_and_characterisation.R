@@ -74,13 +74,16 @@ for (i in 1:85) {
 ##                                                                                                   ##
 #######################################################################################################
 #options(mc.cores = parallel::detectCores() - 4)
-GP_model <- stan_model(here("models", "Neg_Binom_Periodic_Kernel.stan"))
-interpolating_points <- 2
+fresh_run <- FALSE
 prior <- "informative"
-counter <- 1
-for (i in counter:85) {
-  input_time_series <- new_df[i, ]
-  fitting_output <- periodic_gp_fit(input_time_series, interpolating_points, i, GP_model, 1000, 1, prior, TRUE)
+interpolating_points <- 2
+if (fresh_run) {
+  GP_model <- stan_model(here("models", "Neg_Binom_Periodic_Kernel.stan"))
+  counter <- 1
+  for (i in counter:85) {
+    input_time_series <- new_df[i, ]
+    fitting_output <- periodic_gp_fit(input_time_series, interpolating_points, i, GP_model, 1000, 1, prior, TRUE)
+  }
 }
 
 # Visualising all the different time series and removing those with <11 months
