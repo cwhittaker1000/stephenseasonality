@@ -165,13 +165,21 @@ overall_plot <- smooth_plot %>%
   full_join(rain_plot, by = c("id", "cluster", "point"))
 overall_plot$point <- as.numeric(gsub("X", "", overall_plot$point))
 
+# Example Plot
 x <- overall_plot[overall_plot$id == 1, ]
 y <- overall_plot[overall_plot$id == 1 & !is.na(overall_plot$fitted_catch), ]
 ggplot() +
-  geom_bar(data = x, aes(x = point, y = 2 * rainfall/sum(rainfall, na.rm = TRUE)), stat = "identity", fill = "#6EB4D1", alpha = 0.5, width = 0.5) +
-  geom_point(data = x, aes(x = point, y = raw_catch/sum(raw_catch, na.rm = TRUE)), colour = "#E0521A", size = 2) +
-  geom_line(data = y, aes(x = point, y = fitted_catch/sum(raw_catch, na.rm = TRUE))) +
+  geom_bar(data = x, aes(x = point, y = 2 * rainfall/sum(rainfall, na.rm = TRUE)), stat = "identity", 
+           col = adjustcolor("#D1E6F0", alpha.f = 1), fill = "#D1E6F0", alpha = 1, width = 0.49) +
+  geom_point(data = x, aes(x = point, y = raw_catch/sum(raw_catch, na.rm = TRUE)), colour = "black", size = 2) +
+  geom_line(data = y, aes(x = point, y = fitted_catch/sum(raw_catch, na.rm = TRUE)), col = "#E0521A", size = 2) +
   scale_y_continuous(limits=c(0, NA)) +
   scale_x_continuous(labels = c("J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"),
                      breaks = seq(0, 11, length.out = 12)) +
-  labs(y = "%")
+  labs(y = "%") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
+# #6EB4D1 another alternative blue
+# geom_bar(data = x, aes(x = point, y = 2 * rainfall/sum(rainfall, na.rm = TRUE)), stat = "identity", 
+#          col = adjustcolor("#D1E6F0", alpha.f = 1), fill = "#D1E6F0", alpha = 1, width = 0.5) 
