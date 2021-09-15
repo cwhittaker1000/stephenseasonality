@@ -8,14 +8,14 @@ library(mgcv); library(GPfit); library(rstan); library(shinystan); library(resha
 library(deSolve); library(parallel); library(matlib); library(matlab); library(pracma); 
 library(rstan); library(ggplot2); library(invgamma); library(tictoc); library(DescTools)
 
-
 #######################################################################################################
 ##                                                                                                   ##
 ##                           Raw Monthly Time Series and Rainfall Data                               ##
 ##                                                                                                   ##
 #######################################################################################################
 # Load metadata and processed (but non-smoothed) monthly mosquito catch data
-metadata <- readRDS(here("data", "processed", "metadata_and_processed_counts.rds")) %>%
+metadata <- readRDS(here("data", "processed", "metadata_and_processed_counts.rds"))
+processed_metadata <- metadata %>%
   select(id, city, Jan:Dec)  %>%
   tidyr::pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "catch")
 cluster <- readRDS(here("data", "processed", "cluster_membership.rds")) %>%
@@ -34,14 +34,14 @@ for (i in 1:nrow(metadata)) {
   monthly_sum_rainfall_storage[i, ] <- temp_rainfall$rainfall
   print(i)
 }
-monthly_sum_rainfall_storage <- cbind(metadata$id, monthly_sum_rainfall_storage)
-colnames(monthly_sum_rainfall_storage) <- c("id", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-monthly_sum_rainfall_storage <- as.data.frame(monthly_sum_rainfall_storage) %>%
+ccf_monthly_sum_rainfall_storage <- cbind(metadata$id, monthly_sum_rainfall_storage)
+colnames(ccf_monthly_sum_rainfall_storage) <- c("id", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+ccf_monthly_sum_rainfall_storage <- as.data.frame(ccf_monthly_sum_rainfall_storage) %>%
   tidyr::pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "rainfall")
 
 # Combining dataframes together
-overall <- metadata %>%
-  left_join(monthly_sum_rainfall_storage, by = c("id", "month")) %>%
+overall <- processed_metadata %>%
+  left_join(ccf_monthly_sum_rainfall_storage, by = c("id", "month")) %>%
   left_join(cluster, by = "id")
 
 cross_cor <- overall %>%
@@ -63,10 +63,10 @@ cross <- cross_cor %>%
 # Loading in smoothed time-series
 example <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", 1, ".rds"))
 length <- length(example$all_timepoints)
-smoothed <- matrix(nrow = length(unique(metadata$id)), ncol = length)
+smoothed <- matrix(nrow = length(metadata$id), ncol = length)
 counter <- 1
 prior <- "informative"
-for (i in unique(metadata$id)) {
+for (i in metadata$id) {
   
   # Loading in and processing the fitted time-series
   if (prior == "informative") {
@@ -89,12 +89,12 @@ for (i in unique(metadata$id)) {
   
 }
 
-smoothed <- smoothed[, -1]
-smoothed <- data.frame(id = cluster$id, cluster = cluster$cluster, smoothed) %>%
+ccf_smoothed <- smoothed[, -1]
+ccf_smoothed <- data.frame(id = cluster$id, cluster = cluster$cluster, ccf_smoothed) %>%
   pivot_longer(X1:X24, names_to = "point", values_to = "catch")
 
 # Generating summed rainfall over specific time-periods (for comparison to smoothed catch data)
-sum_rainfall_storage <- matrix(nrow = length(unique(metadata$id)), ncol = length-1)
+sum_rainfall_storage <- matrix(nrow = length(metadata$id), ncol = length-1)
 rainfall_files <- list.files(here("data", "processed", "location_specific_rainfall"))
 if (length == 25) {
   interpolation_points <- 2
@@ -105,8 +105,8 @@ if (length == 25) {
 } else {
   stop("how many interpolating points???")
 }
-id <- unique(metadata$id)
-for (i in 1:length(unique(metadata$id))) {
+id <- metadata$id
+for (i in 1:length(metadata$id)) {
   temp_rainfall <- read.csv(paste0(here("data", "processed", "location_specific_rainfall"), "/rainfall_ts", id[i], ".csv"), stringsAsFactors = FALSE)
   temp_summed <- c()
   rainfall <- temp_rainfall$rainfall
@@ -127,12 +127,12 @@ for (i in 1:length(unique(metadata$id))) {
   print(i)
 }
 
-sum_rainfall_storage <- data.frame(id = cluster$id, cluster = cluster$cluster, sum_rainfall_storage) %>%
+ccf_sum_rainfall_storage <- data.frame(id = cluster$id, cluster = cluster$cluster, sum_rainfall_storage) %>%
   pivot_longer(X1:X24, names_to = "point", values_to = "rainfall")
 
 # Combining dataframes together
-overall_smoothed <- smoothed %>%
-  left_join(sum_rainfall_storage, by = c("id", "cluster", "point")) 
+overall_smoothed <- ccf_smoothed %>%
+  left_join(ccf_sum_rainfall_storage, by = c("id", "cluster", "point")) 
 
 cross_cor <- overall_smoothed %>%
   drop_na(catch) %>%
@@ -144,36 +144,34 @@ cross <- cross_cor %>%
   group_by(cluster) %>%
   summarise(n = n(), mean = mean(cross))
 
+# Plotting the results
+rain_plot <- data.frame(sum_rainfall_storage)
+colnames(rain_plot) <- paste0("X", seq(0.25, 11.75, length.out = length(colnames(rain_plot))))
+rain_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, rain_plot) %>%
+  pivot_longer(X0.25:X11.75, names_to = "point", values_to = "rainfall")
 
-monthly_sum_rainfall_storage <- cbind(metadata$id, monthly_sum_rainfall_storage)
-colnames(monthly_sum_rainfall_storage) <- c("id", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-monthly_sum_rainfall_storage <- as.data.frame(monthly_sum_rainfall_storage) %>%
-  tidyr::pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "rainfall")
+smooth_plot <- data.frame(smoothed)
+colnames(smooth_plot) <- paste0("X", seq(0, 12, length.out = length(colnames(smooth_plot))))
+smooth_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, smooth_plot) %>%
+  pivot_longer(X0:X12, names_to = "point", values_to = "fitted_catch")
 
-ento_data <- metadata %>%
-  dplyr::select(id, city, Jan:Dec) %>%
-  pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "catch")
+raw_plot <- metadata %>% select(Jan:Dec)
+colnames(raw_plot) <- paste0("X", seq(0.5, 11.5, length.out = length(colnames(raw_plot))))
+raw_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, raw_plot) %>%
+  pivot_longer(X0.5:X11.5, names_to = "point", values_to = "raw_catch")
 
-overall <- ento_data %>%
-  left_join(monthly_sum_rainfall_storage, by = c("id", "month")) 
+overall_plot <- smooth_plot %>%
+  left_join(raw_plot, by = c("id", "cluster", "point")) %>%
+  full_join(rain_plot, by = c("id", "cluster", "point"))
+overall_plot$point <- as.numeric(gsub("X", "", overall_plot$point))
 
-months <- overall$month
-
-overall <- overall %>%
-  group_by(id) %>%
-  summarise(catch = catch/sum(catch),
-            rainfall = rainfall/sum(rainfall))
-overall$month <- months
-overall$month <- factor(overall$month, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
-
-par(mfrow = c(12, 6))
-ggplot(data = overall[overall$id == 1, ]) +
-  geom_point(aes(x = month, y = catch), colour = "#E0521A", size = 2) +
-  geom_line(aes(x = month, y = catch, group = 1)) +
-  geom_bar(aes(x = month, y = rainfall), stat = "identity", fill = "#6EB4D1", alpha = 0.5) +
-  facet_wrap(~id, scales = "free") +
-  scale_x_discrete(name = unique(new_overall$name),
-                   labels = c("J", "", "", "F", "", "", "M", "", "", 
-                              "A", "", "", "M", "", "", "J", "", "",
-                              "J", "", "", "A", "", "", "S", "", "",
-                              "O", "", "", "N", "", "", "D", "", ""))
+x <- overall_plot[overall_plot$id == 1, ]
+y <- overall_plot[overall_plot$id == 1 & !is.na(overall_plot$fitted_catch), ]
+ggplot() +
+  geom_bar(data = x, aes(x = point, y = 2 * rainfall/sum(rainfall, na.rm = TRUE)), stat = "identity", fill = "#6EB4D1", alpha = 0.5, width = 0.5) +
+  geom_point(data = x, aes(x = point, y = raw_catch/sum(raw_catch, na.rm = TRUE)), colour = "#E0521A", size = 2) +
+  geom_line(data = y, aes(x = point, y = fitted_catch/sum(raw_catch, na.rm = TRUE))) +
+  scale_y_continuous(limits=c(0, NA)) +
+  scale_x_continuous(labels = c("J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"),
+                     breaks = seq(0, 11, length.out = 12)) +
+  labs(y = "%")
