@@ -196,6 +196,10 @@ PCA_output <- as.matrix(normalised_features) %*% loadings
 num_clust <- 4
 clustering_results <- kmeans(PCA_output[, 1:4], num_clust, nstart = 20)
 
+cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, 
+                             cluster = clustering_results$cluster, mean_realisation)
+saveRDS(cluster_output, file = here("data", "processed", "cluster_membership.rds"))
+
 # Visualising the time-series belonging to each cluster
 colours <- palette()[1:num_clust]
 timepoints <- seq(0, 12, length = dim(normalised_output)[2])
