@@ -63,7 +63,9 @@ cross <- cross_cor %>%
 # Loading in smoothed time-series
 example <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", 1, ".rds"))
 length <- length(example$all_timepoints)
-smoothed <- matrix(nrow = length(metadata$id), ncol = length)
+smoothed_mean <- matrix(nrow = length(metadata$id), ncol = length)
+smoothed_lower <- matrix(nrow = length(metadata$id), ncol = length)
+smoothed_upper <- matrix(nrow = length(metadata$id), ncol = length)
 counter <- 1
 prior <- "informative"
 for (i in metadata$id) {
@@ -82,14 +84,23 @@ for (i in metadata$id) {
   MCMC_output <- STAN_output$chain_output
   f <- MCMC_output[, grepl("f", colnames(MCMC_output))]
   f_mean <- apply(f, 2, mean)
-  negbinom_intensity_mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
-  smoothed[counter, ] <- negbinom_intensity_mean
+  f_lower <- apply(f, 2, quantile, 0.25)
+  f_upper <- apply(f, 2, quantile, 0.75)
+  
+  mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
+  lower <- as.numeric(exp(f_lower)[order(all_timepoints)])
+  upper <- as.numeric(exp(f_upper)[order(all_timepoints)])
+  
+  smoothed_mean[counter, ] <- mean
+  smoothed_lower[counter, ] <- lower
+  smoothed_upper[counter, ] <- upper
+  
   counter <- counter + 1
   print(i)
   
 }
 
-ccf_smoothed <- smoothed[, -1]
+ccf_smoothed <- smoothed_mean[, -1]
 ccf_smoothed <- data.frame(id = cluster$id, cluster = cluster$cluster, ccf_smoothed) %>%
   pivot_longer(X1:X24, names_to = "point", values_to = "catch")
 
@@ -150,33 +161,95 @@ colnames(rain_plot) <- paste0("X", seq(0.25, 11.75, length.out = length(colnames
 rain_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, rain_plot) %>%
   pivot_longer(X0.25:X11.75, names_to = "point", values_to = "rainfall")
 
-smooth_plot <- data.frame(smoothed)
-colnames(smooth_plot) <- paste0("X", seq(0, 12, length.out = length(colnames(smooth_plot))))
-smooth_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, smooth_plot) %>%
-  pivot_longer(X0:X12, names_to = "point", values_to = "fitted_catch")
+max_rain <- rain_plot %>%
+  group_by(id) %>%
+  summarise(max_rain = max(rainfall, na.rm = TRUE),
+            total_rain = sum(rainfall, na.rm = TRUE))
+
+smooth_mean_plot <- data.frame(smoothed_mean)
+colnames(smooth_mean_plot) <- paste0("X", seq(0, 12, length.out = length(colnames(smooth_mean_plot))))
+smooth_mean_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, smooth_mean_plot) %>%
+  pivot_longer(X0:X12, names_to = "point", values_to = "mean_fitted_catch")
+
+smooth_lower_plot <- data.frame(smoothed_lower)
+colnames(smooth_lower_plot) <- paste0("X", seq(0, 12, length.out = length(colnames(smooth_lower_plot))))
+smooth_lower_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, smooth_lower_plot) %>%
+  pivot_longer(X0:X12, names_to = "point", values_to = "lower_fitted_catch")
+
+smooth_upper_plot <- data.frame(smoothed_upper)
+colnames(smooth_upper_plot) <- paste0("X", seq(0, 12, length.out = length(colnames(smooth_upper_plot))))
+smooth_upper_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, smooth_upper_plot) %>%
+  pivot_longer(X0:X12, names_to = "point", values_to = "upper_fitted_catch")
 
 raw_plot <- metadata %>% select(Jan:Dec)
 colnames(raw_plot) <- paste0("X", seq(0.5, 11.5, length.out = length(colnames(raw_plot))))
 raw_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, raw_plot) %>%
   pivot_longer(X0.5:X11.5, names_to = "point", values_to = "raw_catch")
 
-overall_plot <- smooth_plot %>%
+overall_plot <- smooth_mean_plot %>%
+  left_join(smooth_lower_plot, by = c("id", "cluster", "point")) %>%
+  left_join(smooth_upper_plot, by = c("id", "cluster", "point")) %>%
   left_join(raw_plot, by = c("id", "cluster", "point")) %>%
-  full_join(rain_plot, by = c("id", "cluster", "point"))
+  full_join(rain_plot, by = c("id", "cluster", "point")) 
 overall_plot$point <- as.numeric(gsub("X", "", overall_plot$point))
 
+total_raw_catch <- overall_plot %>%
+  group_by(id) %>%
+  summarise(total_raw_catch = sum(raw_catch, na.rm = TRUE),
+            max_raw_catch = max(raw_catch/total_raw_catch, na.rm = TRUE))
+
+overall_plot <- overall_plot %>%
+  left_join(total_raw_catch, by = "id") %>%
+  mutate(mean_norm = mean_fitted_catch/total_raw_catch,
+         lower_norm = lower_fitted_catch/total_raw_catch,
+         upper_norm = upper_fitted_catch/total_raw_catch,
+         raw_norm = raw_catch/total_raw_catch)
+
+max_record <- overall_plot %>%
+  group_by(id) %>%
+  summarise(max_val = max(upper_norm, raw_norm, na.rm = TRUE),
+            )
+
+overall_plot <- overall_plot %>%
+  left_join(max_rain, by = "id") %>%
+  left_join(max_record, by = "id") %>%
+  mutate(norm_rain = rainfall/max_rain,
+         scaled_rain = norm_rain * max_val)
+
+city <- data.frame(id = metadata$id, city = metadata$city)
+
+overall_plot <- overall_plot %>%
+  left_join(city, by = "id")
+
 # Example Plot
-x <- overall_plot[overall_plot$id == 1, ]
-y <- overall_plot[overall_plot$id == 1 & !is.na(overall_plot$fitted_catch), ]
+x <- overall_plot[overall_plot$id %in% c(1:100), ]
+y <- overall_plot[overall_plot$id %in% c(1:100) & !is.na(overall_plot$mean_fitted_catch), ]
+
 ggplot() +
-  geom_bar(data = x, aes(x = point, y = 2 * rainfall/sum(rainfall, na.rm = TRUE)), stat = "identity", 
-           col = adjustcolor("#D1E6F0", alpha.f = 1), fill = "#D1E6F0", alpha = 1, width = 0.49) +
-  geom_point(data = x, aes(x = point, y = raw_catch/sum(raw_catch, na.rm = TRUE)), colour = "black", size = 2) +
-  geom_line(data = y, aes(x = point, y = fitted_catch/sum(raw_catch, na.rm = TRUE)), col = "#E0521A", size = 2) +
+  geom_bar(data = x, aes(x = point, y = scaled_rain), stat = "identity", col = adjustcolor("#D1E6F0", alpha.f = 1), fill = "#D1E6F0", alpha = 1, width = 0.49) +
+  geom_point(data = x, aes(x = point, y = raw_norm), colour = "black", size = 2) +
+  geom_ribbon(data = y, aes(x = point, ymin = lower_norm, 
+                            ymax = upper_norm), fill = "#E0521A", alpha = 0.2) +
+  geom_line(data = y, aes(x = point, y = mean_norm), col = "#E0521A", size = 2) +
   scale_y_continuous(limits=c(0, NA)) +
   scale_x_continuous(labels = c("J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"),
                      breaks = seq(0, 11, length.out = 12)) +
-  labs(y = "%") +
+  facet_wrap(~id, ncol = 12, scales = "free") +
+  labs(y = "Normalised Value", x= "") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
+ggplot() +
+  geom_bar(data = x, aes(x = point, y = scaled_rain), stat = "identity", col = adjustcolor("#D1E6F0", alpha.f = 1), fill = "#D1E6F0", alpha = 1, width = 0.49) +
+  geom_point(data = x, aes(x = point, y = raw_norm), colour = "black", size = 2) +
+  geom_ribbon(data = y, aes(x = point, ymin = lower_norm, 
+                            ymax = upper_norm, fill = city), alpha = 0.2) +
+  geom_line(data = y, aes(x = point, y = mean_norm, col = city), size = 2) +
+  scale_y_continuous(limits=c(0, NA)) +
+  scale_x_continuous(labels = c("J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"),
+                     breaks = seq(0, 11, length.out = 12)) +
+  facet_wrap(~id, ncol = 12, scales = "free") +
+  labs(y = "Normalised Value", x= "") +
   theme_bw() +
   theme(panel.grid = element_blank())
 
