@@ -93,7 +93,7 @@ remove <- which(sums < 25 | length < 10)
 retain_index <- seq(1, 85)[-remove]
 for (i in retain_index) {
   mean_realisation_extract(i, new_df, prior, TRUE)
-  browser()
+  #browser()
 }
 
 metadata <- raw_df[retain_index, ] %>%
@@ -172,6 +172,10 @@ for (i in 1:length(retain_index)) {
   features[i, ] <- c(entropy, median_period, prop_points_mean, distance_from_jan, peaks, mean, weight)
   print(i)
 }
+
+features_df <- data.frame(id = metadata$id, country = metadata$country, admin1 = metadata$admin1, admin2 = metadata$admin2,
+                          cit = metadata$city, features)
+saveRDS(features_df, file = here("data", "processed", "metadata_and_time_series_features.rds"))
 
 #######################################################################################################
 ##                                                                                                   ##
