@@ -7,7 +7,7 @@ library(tidyverse); library(here); library(zoo); library(forecast); library(TSA)
 library(mgcv); library(GPfit); library(rstan); library(shinystan); library(reshape2); 
 library(deSolve); library(parallel); library(matlib); library(matlab); library(pracma); 
 library(rstan); library(ggplot2); library(invgamma); library(tictoc); library(DescTools);
-library(dismo); library(gbm); library(mltools); library(glmnet); library(caret)
+library(dismo); library(gbm); library(mltools); library(glmnet); library(caret);
 
 source(here("functions", "time_series_characterisation_functions.R"))
 
