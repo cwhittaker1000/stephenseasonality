@@ -118,8 +118,8 @@ table(metadata$city)
 
 # Generating the Time Series Features
 mean_realisation <- matrix(nrow = length(retain_index), ncol = (12 * interpolating_points + 1))
-features <- matrix(nrow = length(retain_index), ncol = 7)
-colnames(features) <- c("entropy", "period", "prop_points", "jan_dist", "peaks", "mean", "weight")
+features <- matrix(nrow = length(retain_index), ncol = 8)
+colnames(features) <- c("entropy", "period", "prop_points", "jan_dist", "peaks", "mean", "weight", "per_ind_4_months")
 for (i in 1:length(retain_index)) {
   
   index <- retain_index[i]
@@ -167,9 +167,10 @@ for (i in 1:length(retain_index)) {
   median_period <- median(MCMC_output[, "period"])
   prop_points_mean <- points_greater_than_mean(1.6, negbinom_intensity_mean)
   distance_from_jan <- calculate_peak_distance_from_jan(ordered_timepoints, negbinom_intensity_mean)
+  percent_incidence_out <- percent_incidence(negbinom_intensity_mean, 4)
   
   # Adding single time-series features to overall features matrix
-  features[i, ] <- c(entropy, median_period, prop_points_mean, distance_from_jan, peaks, mean, weight)
+  features[i, ] <- c(entropy, median_period, prop_points_mean, distance_from_jan, peaks, mean, weight, percent_incidence_out)
   print(i)
 }
 
@@ -193,11 +194,11 @@ normalised_output <- t(apply(mean_realisation, 1, normalise_total))
 # Running PCA on normalised features
 PCA <- prcomp(normalised_features)
 summary <- summary(PCA)
-loadings <- PCA$rotation[, 1:7]
+loadings <- PCA$rotation[, 1:8]
 PCA_output <- as.matrix(normalised_features) %*% loadings
 
 # Clustering the data 
-num_clust <- 4
+num_clust <- 3
 clustering_results <- kmeans(PCA_output[, 1:4], num_clust, nstart = 20)
 
 cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, 
@@ -226,6 +227,69 @@ for (i in 1:num_clust) {
 plot(PCA_output[, 2], PCA_output[, 1], col = clustering_results$cluster, pch = 20, xlab = "PCA Comp 2", ylab = "PCA Comp 1", cex = 2, las = 1)
 clusters <- as.character(seq(1:num_clust))
 legend("bottomright", as.character(seq(1:num_clust)), cex = 1.5, col = palette()[1:num_clust], pch = 20)
+
+# Visualising the properties of each cluster
+number_properties <- ncol(normalised_features)
+property_names <- colnames(normalised_features)
+par(mfrow = c(num_clust, number_properties + 1),
+    mar = c(4.5, 2, 2, 2))
+max <- 10 
+mean_operation_values <- matrix(nrow = num_clust, ncol = number_properties)
+colnames(mean_operation_values) <- property_names
+for (i in 1:num_clust) {
+  if (i < num_clust) {
+    subsetter <- clustering_results$cluster == i
+    cluster_time_series <- normalised_output[subsetter, ]
+    cluster_time_series_properties <- normalised_features[subsetter, ]
+    plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[i], lwd = 2, ylab = "", xlab = "")
+    for (j in 1:number_properties) {
+      hist(cluster_time_series_properties[, j], col = palette()[i], main = "", xlab = "", ylab = "",
+           xlim = c(min(cluster_time_series_properties[, j]), max(cluster_time_series_properties[, j])))
+    }
+    mean_operation_values[i, ] <- apply(cluster_time_series_properties, 2, mean)
+  } else {
+    subsetter <- clustering_results$cluster == i
+    cluster_time_series <- normalised_output[subsetter, ]
+    cluster_time_series_properties <- normalised_features[subsetter, ]
+    plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[i], lwd = 2, ylab = "", xlab = "")
+    for (j in 1:number_properties) {
+      hist(cluster_time_series_properties[, j], col = palette()[i], main = "", xlab = "", ylab = "",
+           xlim = c(min(cluster_time_series_properties[, j]), max(cluster_time_series_properties[, j])))
+      mtext(property_names[j], side = 1, outer = FALSE, cex = 1, font = 2, line = 3, col = "grey20")
+    }
+    mean_operation_values[i, ] <- apply(cluster_time_series_properties, 2, mean)
+  }
+}
+
+# Exploring entropy in further detail - consider removing/check with Sam I'm doing it correct
+par(mfrow = c(2, 4))
+for (i in which(cluster_membership == 3)) {
+  index <- metadata$id[i]
+  mean_realisation_extract(index, new_df, prior, TRUE)
+  browser()
+}
+features[which(cluster_membership == 3), ]
+
+interval <-  findInterval(features[, "entropy"], quantile(features[, "entropy"], probs=0:5/5))
+colours <- palette()[1:length(unique(interval))]
+timepoints <- seq(0, 12, length = dim(normalised_output)[2])
+cluster_membership <- interval
+table(cluster_membership)
+par(mfrow = c(2, 3))
+for (i in 1:(length(unique(interval)) - 1)) {
+  cluster <- normalised_output[cluster_membership == i, ]
+  max <- max(cluster)
+  plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", ylim = c(0, 10), lwd = 2, col = colours[i], 
+       las = 1, xaxt = "n", xlab = "", ylab = "")
+  for (j in 1:length(cluster[, 1])) {
+    lines(timepoints, cluster[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
+  }
+  number_time_series <- length(cluster[, 1])
+  entropy <- mean(features[cluster_membership == i, "entropy"])
+  text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
+  text(6.5, 9.5, paste0("Entropy = ", round(entropy, 0)), cex = 1.5, col = "grey20")
+}
+
 
 # Visualising the time-series belonging to urban/rural
 urban_rural <- overall$city

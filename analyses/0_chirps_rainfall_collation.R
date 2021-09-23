@@ -5,6 +5,9 @@ library(tidyverse); library(rgee); library(sf); library(raster); library(reticul
 
 # Initialise rgee
 ee_Initialize()
+#py_install("geemap")
+gm <- import("geemap")
+ee_check() # Check non-R dependencies
 
 # Load metadata and admin 2 units
 metadata <- readRDS(here("data", "processed", "metadata_and_processed_counts.rds"))

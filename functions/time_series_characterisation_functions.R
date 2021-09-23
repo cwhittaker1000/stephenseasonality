@@ -2,9 +2,32 @@
 entropic_measure <- function(fitting_output) {
   entropy <- 0
   for (i in 1:length(fitting_output)) {
+    print(fitting_output[i] * log2(fitting_output[i]/(1/length(fitting_output))))
     entropy <- entropy + fitting_output[i] * log2(fitting_output[i]/(1/length(fitting_output)))
   }
   return(entropy)
+}
+
+# Calculates percentage of incidence in peak X months
+percent_incidence <- function(fitting_output, number_of_months) {
+  
+  timepoints_per_month <- (length(fitting_output) - 1)/12
+  number_timepoints <- timepoints_per_month * number_of_months
+  if ((timepoints_per_month %% 1) != 0) {
+    stop("number of timepoints per month isn't a whole number")
+  }
+  incidence <- c()
+  for (i in 1:length(fitting_output)) {
+    indices <- seq(i, i + number_timepoints - 1)
+    for (j in 1:length(indices)) {
+      if (indices[j] > length(fitting_output)) {
+        indices[j] <- indices[j] - length(fitting_output)
+      }
+    }
+    incidence <- c(incidence, sum(fitting_output[indices])/sum(fitting_output))
+  }
+  return(max(incidence))
+  
 }
 
 # Calculates the Peak Distance from January On a Circle
