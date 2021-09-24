@@ -27,12 +27,14 @@ overall <- ts_metadata %>%
 
 # Prepping Data - Selecting Variables, Creating Recipe, Generating CV Folds
 data <- overall %>%
-  dplyr::select(period, population_per_1km:worldclim_9) %>%
+  dplyr::select(period , population_per_1km:worldclim_9) %>%
   dplyr::select(-contains("LC"))
-envt_recipe <- recipe(period ~ ., data = data) %>% 
+envt_recipe <- recipe(period  ~ ., data = data) %>% 
   step_center(all_predictors()) %>% 
   step_scale(all_predictors()) 
 envt_prepped <- prep(envt_recipe, training = data, verbose = TRUE)
+juiced <- juice(envt_prepped)
+
 cv_splits <- vfold_cv(data, v = 6) # v sets number of splits
 perf_metrics <- metric_set(yardstick::rmse)
 
@@ -92,44 +94,46 @@ x <- random_forest_final %>%
 
 ## unclear to me currently why x and random_forest_final produce different predictions - need to work this out
 plot(data$period, x$.pred, pch = 20)
-points(data$period, random_forest_final$fit$fit$fit$predictions, pch = 20, col = "orange")
+points(data$period , random_forest_final$fit$fit$fit$predictions, pch = 20, col = "orange")
+# think this is the only point I need to work out, and then the random forest workflow is done
 
-final_rmse <- random_forest_final %>% 
+random_forest_final %>% 
   predict(data) %>% 
-  bind_cols(dplyr::select(data, period)) %>% 
-  perf_metrics(truth = period, estimate = .pred)
-sqrt(sum((data$period - x$.pred)^2)/length(data$period))
-sqrt(sum((data$period - random_forest_final$fit$fit$fit$predictions)^2)/length(data$period))
-
+  bind_cols(dplyr::select(data, period )) %>% 
+  perf_metrics(truth = period , estimate = .pred)
+sqrt(sum((data$period  - x$.pred)^2)/length(data$period ))
+sqrt(sum((data$period  - random_forest_final$fit$fit$fit$predictions)^2)/length(data$period ))
+# why is there a significant diffrence in the sum of squares between predictions from x and predictions from random_forest_final
 
 final_rf <- finalize_model(random_forest, best_rmse)
 y <- final_rf %>% 
-  fit(period ~ ., data = juice(envt_prepped)) %>%
+  fit(period  ~ ., data = data) %>%
   predict(data) 
-plot(data$period, y$.pred, pch = 20)
+plot(data$period , y$.pred, pch = 20)
+sqrt(sum((data$period  - y$.pred)^2)/length(data$period ))
 
-
+# The below aren't actually different (you can use juiced or unjuiced data) 
+# Any diff is because of stochasticity in the permutation used to calculate variable importance
+# Become identical if you set same seed for each. 
+set.seed(1)
 final_rf %>%
   set_engine("ranger", importance = "permutation") %>%
-  fit(period ~ ., data = juice(envt_prepped)) %>%
+  fit(period  ~ ., data = data) %>%
   vip(geom = "point")
-
-random_forest_final %>%
-  set_engine("ranger", importance = "permutation") %>%
-  fit(period ~ ., data = juice(envt_prepped)) %>%
-  vip(geom = "point")
-
-
-
-best_rf <- select_best(tune_res, "rmse")
-final_rf <- finalize_model(random_forest, best_rf)
-final_rf
+set.seed(1)
 final_rf %>%
   set_engine("ranger", importance = "permutation") %>%
-  fit(period ~ .,
-      data = juice(envt_prepped)) %>%
+  fit(period  ~ ., data = juiced) %>%
   vip(geom = "point")
+unjuiced <- final_rf %>%
+  set_engine("ranger", importance = "permutation") %>%
+  fit(period  ~ ., data = data)
+juiced <- final_rf %>%
+  set_engine("ranger", importance = "permutation") %>%
+  fit(period  ~ ., data = juiced) 
+plot(unjuiced$fit$predictions, juiced$fit$predictions)
 
+# Finalising workflow, fitting to training and testing data etc
 final_wf <- workflow() %>%
   add_recipe(envt_recipe) %>%
   add_model(final_rf)
@@ -144,6 +148,10 @@ final_res <- final_wf %>%
   last_fit(rf_split)
 final_res %>%
   collect_metrics()
+random_forest_final %>% 
+  predict(data) %>% 
+  bind_cols(dplyr::select(data, period )) %>% 
+  perf_metrics(truth = period , estimate = .pred)
 
 plot(final_res$.predictions[[1]]$period, final_res$.predictions[[1]]$.pred) 
 
