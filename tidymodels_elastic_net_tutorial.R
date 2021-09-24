@@ -76,7 +76,6 @@ collect_metrics(cv_eval)
 perf_lasso %>% 
   arrange(.metric)
 
-
 # Model Tuning
 ames_mixture <- linear_reg(penalty = tune(), mixture = tune()) %>% 
   set_engine("glmnet")

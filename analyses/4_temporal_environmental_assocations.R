@@ -8,6 +8,7 @@ library(mgcv); library(GPfit); library(rstan); library(shinystan); library(resha
 library(deSolve); library(parallel); library(matlib); library(matlab); library(pracma); 
 library(rstan); library(ggplot2); library(invgamma); library(tictoc); library(DescTools);
 library(dismo); library(gbm); library(mltools); library(glmnet); library(caret);
+library(tidymodels); library(doParallel); library(vip); library(forcats)
 
 source(here("functions", "time_series_characterisation_functions.R"))
 
@@ -21,9 +22,141 @@ envt_variables <- read.csv(here("data", "processed", "location_ecological_data.c
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
   group_by(id, country, admin1, admin2) %>%
   summarise(across(population_per_1km:worldclim_9, ~ mean(.x, na.rm = TRUE)))
-  
 overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2")) 
+
+# Prepping Data - Selecting Variables, Creating Recipe, Generating CV Folds
+data <- overall %>%
+  dplyr::select(period, population_per_1km:worldclim_9) %>%
+  dplyr::select(-contains("LC"))
+envt_recipe <- recipe(period ~ ., data = data) %>% 
+  step_center(all_predictors()) %>% 
+  step_scale(all_predictors()) 
+envt_prepped <- prep(envt_recipe, training = data, verbose = TRUE)
+cv_splits <- vfold_cv(data, v = 6) # v sets number of splits
+perf_metrics <- metric_set(yardstick::rmse)
+
+# Ridge Regression - Specifying Model and Hyperparameters, Creating Workflow
+ridge <- linear_reg(penalty = tune(), mixture = 0) %>%  
+  set_engine("glmnet")
+envt_workflow <- workflow() %>% 
+  add_recipe(envt_recipe) %>% 
+  add_model(ridge)
+hyperparams <- penalty() 
+hyperparams <- range_set(hyperparams, c(-10, 2))
+regular_grid <- grid_regular(hyperparams, levels = c(50))
+
+# Lasso Regression - Specifying Model and Hyperparameters, Creating Workflow
+lasso <- linear_reg(penalty = tune(), mixture = 1) %>%  
+  set_engine("glmnet")
+envt_workflow <- workflow() %>% 
+  add_recipe(envt_recipe) %>% 
+  add_model(lasso)
+hyperparams <- penalty() 
+hyperparams <- range_set(hyperparams, c(-10, 2))
+regular_grid <- grid_regular(hyperparams, levels = c(50))
+
+# Elastic Net Regression - Specifying Model and Hyperparameters, Creating Workflow
+elastic_net <- linear_reg(penalty = tune(), mixture = tune()) %>%  
+  set_engine("glmnet")
+envt_workflow <- workflow() %>% 
+  add_recipe(envt_recipe) %>% 
+  add_model(elastic_net)
+lasso_penalty <- penalty()
+lasso_penalty <- range_set(lasso_penalty, c(-10, 1))
+hyperparams <- parameters(lasso_penalty, mixture())
+regular_grid <- grid_regular(hyperparams, levels = c(20))
+regular_grid %>% 
+  ggplot(aes(x = mixture, y = penalty)) +
+  geom_point() +
+  scale_y_log10()
+
+# Running the Model in Parallel 
+all_cores <- parallel::detectCores(logical = FALSE)
+cl <- makePSOCKcluster(all_cores)
+registerDoParallel(cl)
+
+clusterEvalQ(cl, {library(tidymodels)})
+ames_tune <- tune_grid(
+  object = envt_workflow,
+  resamples = cv_splits,
+  grid = regular_grid,
+  metrics = perf_metrics
+)
+
+stopCluster(cl)
+
+# Evaluating Performance Using RMSE
+collect_metrics(ames_tune) %>% 
+  filter(.metric == "rmse") %>%
+  ggplot(aes(x = penalty, y = mean)) +
+  geom_line() +
+  geom_point() +
+  scale_x_log10() +
+  geom_vline(xintercept = 0.001, color = "purple", lty = "dotted")
+
+collect_metrics(ames_tune) %>% 
+  filter(.metric == "rmse") %>%
+  ggplot(aes(x = penalty, y = mixture, fill = log(mean))) +
+  geom_tile() +
+  scale_x_log10() 
+
+show_best(ames_tune, "rmse")
+best_mixture <- select_best(ames_tune, metric = "rmse")
+ames_mixture_final <- envt_workflow %>% 
+  finalize_workflow(best_mixture) %>% 
+  fit(data = data)
+
+tidy_coefs <- ames_mixture_final$fit$fit$fit %>% 
+  broom::tidy() %>% 
+  filter(term != "(Intercept)") %>% 
+  dplyr::select(-step, -dev.ratio)
+
+delta <- abs(tidy_coefs$lambda - best_mixture$penalty)
+lambda_opt <- tidy_coefs$lambda[which.min(delta)]
+label_coefs <- tidy_coefs %>% 
+  mutate(abs_estimate = abs(estimate)) %>% 
+  filter(abs_estimate >= 0.01) %>% 
+  distinct(term) %>% 
+  inner_join(tidy_coefs, by = "term") %>% 
+  filter(lambda == lambda_opt)
+tidy_coefs %>% 
+  ggplot(aes(x = lambda, y = estimate, group = term, col = term, label = term)) +
+  geom_vline(xintercept = lambda_opt, lty = 3) +
+  geom_line(alpha = .4) +
+  theme(legend.position = "none") +
+  scale_x_log10() +
+  ggrepel::geom_text_repel(data = label_coefs, max.overlaps = 22)
+
+ames_mixture_final %>% 
+  predict(data) %>% 
+  bind_cols(dplyr::select(data, period)) %>% 
+  perf_metrics(truth = period, estimate = .pred)
+x <- ames_mixture_final %>% 
+  predict(data) 
+plot(data$period, x$.pred, pch = 20, xlim = c(0, 20), ylim = c(0, 20))
+
+ames_mixture_final %>%
+  extract_fit_parsnip() %>%
+  vi(lambda = best_mixture$penalty) %>%
+  mutate(Importance = abs(Importance),
+         Variable = fct_reorder(Variable, Importance)) %>%
+  ggplot(aes(x = Importance, y = Variable, fill = Sign)) +
+  geom_col() +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(y = NULL)
+
+
+
+
+
+
+
+
+
+
+
+
 
 subset <- overall %>%
   dplyr::select(id, entropy:weight, population_per_1km, EVI, worldclim_1:worldclim_9) %>%
