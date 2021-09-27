@@ -98,9 +98,25 @@ sqrt(sum((rf_train$period  - order_raw_pred_best_hyp$.pred)^2)/length(rf_train$p
 random_forest_final <- rf_workflow %>%
   finalize_workflow(best_rmse)
 
-final_ref <- random_forest_final %>%
+# checking that this gives us the OOB error model 
+x <- random_forest_final %>%
+  fit(data = juiced)
+plot(x$fit$fit$fit$predictions, rf_train$period)
+sqrt(sum((rf_train$period  - x$fit$fit$fit$predictions)^2)/length(rf_train$period ))
+
+# calculating variable importance
+set.seed(1)
+random_forest_final %>%
   fit(data = juiced) %>%
   pull_workflow_fit() %>%
+  vip(geom = "point")
+
+# alternative way of calculating variable importance (confirm identical to above with same seed)
+final_rf <- finalize_model(random_forest, best_rmse)
+set.seed(1)
+final_rf %>%
+  set_engine("ranger", importance = "permutation") %>%
+  fit(period  ~ ., data = rf_train) %>%
   vip(geom = "point")
 
 unregister_dopar <- function() {
@@ -111,6 +127,12 @@ unregister_dopar()
 
 final_res <- random_forest_final %>%
   last_fit(rf_split)
+
+set.seed(1)
+extract_workflow(final_res) %>%
+  extract_fit_parsnip() %>%
+  vip(geom = "point")
+
 final_res %>%
   collect_metrics()
 plot(final_res$.predictions[[1]]$period, final_res$.predictions[[1]]$.pred, 
@@ -119,13 +141,14 @@ sqrt(sum((final_res$.predictions[[1]]$period - final_res$.predictions[[1]]$.pred
 
 
 
+
+
+
+
+
+
+
 # below is wrong because once you've finalised aim is to just evaluate once on the validation data set
-fit_call %>% 
-  predict(data) %>% 
-  bind_cols(dplyr::select(data, period )) %>% 
-  perf_metrics(truth = period , estimate = .pred)
-
-
 fit_call <- random_forest_final %>% 
   fit(data = rf_train)
 predictions <- fit_call %>% 
