@@ -28,16 +28,18 @@ overall <- ts_metadata %>%
 # Creating Test and Training Data
 set.seed(123)
 data <- overall %>% # need to figure out whether to do rf_train or data here 
-  dplyr::select(period , population_per_1km:worldclim_9) %>%
-  dplyr::select(-contains("LC"))
-rf_split <- initial_split(data, prop = 5/6)
+  dplyr::select(period, country, population_per_1km:worldclim_9) %>%
+  dplyr::select(-contains("LC")) %>%
+  mutate(country = as.factor(country))
+rf_split <- initial_split(data, prop = 0.90, strata = country)
 rf_train <- training(rf_split)
 rf_test <- testing(rf_split)
 
 # Prepping Data - Selecting Variables, Creating Recipe, Generating CV Folds
 envt_recipe <- recipe(period  ~ ., data = rf_train) %>% 
-  step_center(all_predictors()) %>% 
-  step_scale(all_predictors()) 
+  step_center(all_predictors(), -country) %>% 
+  step_scale(all_predictors(), -country) %>%
+  step_dummy(country)
 envt_prepped <- prep(envt_recipe, training = rf_train, verbose = TRUE)
 juiced <- juice(envt_prepped)
 
@@ -61,6 +63,7 @@ all_cores <- parallel::detectCores(logical = FALSE)
 cl <- makePSOCKcluster(all_cores)
 registerDoParallel(cl)
 clusterEvalQ(cl, {library(tidymodels)})
+
 set.seed(345)
 tune_res <- tune_grid(object = rf_workflow,
                       resamples = cv_splits,
@@ -91,7 +94,7 @@ raw_pred_best_hyp <- raw_predictions %>%
 order_raw_pred_best_hyp <- raw_pred_best_hyp %>%
   dplyr::arrange(., .row)
 
-plot(order_raw_pred_best_hyp$.pred, rf_train$period)
+plot(order_raw_pred_best_hyp$.pred, rf_train$period, xlim = c(6, 18), ylim = c(6,))
 sqrt(sum((rf_train$period  - order_raw_pred_best_hyp$.pred)^2)/length(rf_train$period ))
 
 # Finalising Workflow and Fitting this Model to the Entire Data 
@@ -100,14 +103,14 @@ random_forest_final <- rf_workflow %>%
 
 # checking that this gives us the OOB error model 
 x <- random_forest_final %>%
-  fit(data = juiced)
+  fit(data = rf_train)
 plot(x$fit$fit$fit$predictions, rf_train$period)
 sqrt(sum((rf_train$period  - x$fit$fit$fit$predictions)^2)/length(rf_train$period ))
 
 # calculating variable importance
 set.seed(1)
 random_forest_final %>%
-  fit(data = juiced) %>%
+  fit(data = rf_train) %>%
   pull_workflow_fit() %>%
   vip(geom = "point")
 
@@ -126,7 +129,12 @@ unregister_dopar <- function() {
 unregister_dopar()
 
 final_res <- random_forest_final %>%
-  last_fit(rf_split)
+  last_fit(rf_split) 
+
+# final_res <- random_forest_final %>%
+#   fit(data) %>%
+#   pull_workflow_fit() %>%
+#   vip(geom = "point")
 
 set.seed(1)
 extract_workflow(final_res) %>%
@@ -139,14 +147,15 @@ plot(final_res$.predictions[[1]]$period, final_res$.predictions[[1]]$.pred,
      xlim = c(5, 16), ylim = c(5, 16)) 
 sqrt(sum((final_res$.predictions[[1]]$period - final_res$.predictions[[1]]$.pred)^2/length(final_res$.predictions[[1]]$.pred)))
 
+# sqrt(sum((data$period - final_res$fit$fit$fit$predictions)^2/length(final_res$fit$fit$fit$predictions)))
+# sqrt(sum((data$period - final_res$.pred)^2/length(final_res$.pred)))
 
 
-
-
-
-
-
-
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
 
 # below is wrong because once you've finalised aim is to just evaluate once on the validation data set
 fit_call <- random_forest_final %>% 
