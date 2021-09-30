@@ -25,6 +25,11 @@ envt_variables <- read.csv(here("data", "processed", "location_ecological_data.c
 overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2")) 
 
+hist(overall$LC_190[overall$peaks == 1])
+hist(overall$LC_190[overall$peaks == 2])
+
+table(overall$peaks, overall$cit)
+
 # Creating Test and Training Data
 set.seed(123)
 data <- overall %>% # need to figure out whether to do rf_train or data here 
@@ -124,13 +129,13 @@ class(random_forest_final)
 # note when I use ROSE oversampling, this code doesn't run
 # *because* x$fit$fit$fit$predictions has predictions from initial training,
 # not from a new fit to the whole rf_train as far as I can make out. 
-# Nah don't think so, think it's refitting to rf_train, but probably 
-# running rf_train through the recipe
-temp <- rf_train#[-c(1:10), ]
+# Nah don't think so, think it's refitting to rf_train, but running rf_train through the recipe
+temp <- rf_train#[-c(1:10), ]  
 x <- random_forest_final %>%
   fit(data = temp)
-dim(x$fit$fit$fit$predictions)[1] == dim(temp)[1]
-extract_fit_parsnip(x) # but this says sample size is 52 which size of rf_train[-1, ]
+dim(x$fit$fit$fit$predictions)[1] == dim(temp)[1] # always match, because temp is being run 
+                                                  # through the recipe associated with random_forest_final
+extract_fit_parsnip(x)
 x$fit$fit$fit$predictions
 pred <- ifelse(x$fit$fit$fit$predictions[, 1] > 0.50, 1, 2)
 sum(pred == temp$peaks)/length(temp$peaks)
@@ -202,7 +207,7 @@ extract_workflow(final_res) %>%
   vip(geom = "point")
 
 # extracts the fitted model and predictions from the workflow
-# still OOS random forest predictions though
+# still OOS random forest predictions
 y <- extract_workflow(final_res)
 y$fit$fit$fit$predictions
 pred <- ifelse(y$fit$fit$fit$predictions[, 1] > 0.50, 1, 2)
@@ -210,11 +215,8 @@ sum(pred == temp$peaks)/length(temp$peaks)
 # matches the fitting and OOS, pruning based prediction on lines 129 - 136 (approx)
 
 z <- predict(y, rf_train)
-sum(pred == z$.pred_class)/length(z$.pred_class)
-# why is this different to 
-#     predict(x, rf_train)
-#     sum(as.numeric(rf_train$peaks) == predict(x, rf_train)$.pred_class)/length(predict(x, rf_train)$.pred_class)
-# on ~ lines 144 and 145 above. 
+sum(temp$peaks == z$.pred_class)/length(z$.pred_class)
+# matches the fitting based prediction on the original call way on ~ lines 144 and 145 above. 
 # both are predicting on the full random_forest
 
 d <- predict(y, rf_test)
