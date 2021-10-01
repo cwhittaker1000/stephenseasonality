@@ -8,7 +8,8 @@ library(mgcv); library(GPfit); library(rstan); library(shinystan); library(resha
 library(deSolve); library(parallel); library(matlib); library(matlab); library(pracma); 
 library(rstan); library(ggplot2); library(invgamma); library(tictoc); library(DescTools);
 library(dismo); library(gbm); library(mltools); library(glmnet); library(caret); library(themis)
-library(tidymodels); library(doParallel); library(vip); library(forcats); library(vip)
+library(tidymodels); library(doParallel); library(vip); library(forcats); library(vip);
+library(RColorBrewer); library(corrplot)
 
 source(here("functions", "time_series_characterisation_functions.R"))
 
@@ -37,7 +38,7 @@ overall <- ts_metadata %>%
 ##             I.e. Test/Train Split, CV Folds, Random Forest Engine, Performance Metrics            ##
 ##                                                                                                   ##
 #######################################################################################################
-# Creating Test and Training Data
+# Subsetting Outcome and Variables for Analysis
 set.seed(123)
 data <- overall %>% # need to figure out whether to do rf_train or data here 
   dplyr::select(peaks, country, population_per_1km:worldclim_9) %>%
@@ -45,6 +46,20 @@ data <- overall %>% # need to figure out whether to do rf_train or data here
   mutate(country = as.factor(country))
 data$peaks <- ifelse(data$peaks == 1, "one", "two")
 data$peaks <- as.factor(data$peaks)
+
+# Exploring Correlations in the Data and Removing Highly Correlated Variables
+
+rem <- c("peaks", "country", "LC_62", "LC_152", "LC_202", "LC_80", "LC_71", "LC_160") # variables step_nzv removes below + 
+                                                                                      # outcomes we don't want to assess correlation of
+rem_index <- which(colnames(data) %in% rem)
+clim_index <- grep("worldclim", colnames(data))
+correlation_matrix <- cor(data[, -rem_index])
+correlation_matrix <- cor(data[, clim_index])
+
+corrplot(correlation_matrix, type="upper", 
+         col = brewer.pal(n=8, name="RdYlBu"))
+
+# Creating Test and Training Data
 rf_split <- initial_split(data, prop = 0.8, strata = country)
 rf_train <- training(rf_split)
 rf_test <- testing(rf_split)
