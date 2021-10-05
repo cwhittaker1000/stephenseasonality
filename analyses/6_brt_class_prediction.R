@@ -42,14 +42,13 @@ overall <- ts_metadata %>%
 set.seed(234)
 data <- overall %>% # need to figure out whether to do rf_train or data here 
   dplyr::select(peaks, country, population_per_1km:worldclim_9, -LC_190) %>%
-  #dplyr::select(-contains("LC")) %>%
   mutate(country = as.factor(country))
 data$peaks <- ifelse(data$peaks == 1, "one", "two")
 data$peaks <- as.factor(data$peaks)
 
 # Exploring Correlations in the Data and Removing Highly Correlated Variables
 rem <- c("peaks", "country", "LC_62", "LC_152", "LC_202", "LC_80", "LC_71", "LC_160") # variables step_nzv removes below + 
-                                                                                      # outcomes we don't want to assess correlation of
+# outcomes we don't want to assess correlation of
 rem_index <- which(colnames(data) %in% rem)
 clim_index <- grep("worldclim", colnames(data))
 correlation_matrix <- cor(data[, -rem_index])
@@ -94,14 +93,31 @@ cv_splits <- vfold_cv(rf_train, v = 6) # v sets number of splits
 #perf_metrics <- metric_set(yardstick::accuracy)
 #perf_metrics <- metric_set(yardstick::roc_auc)
 
-# Setting Up The Random Forest Framework
-random_forest <- rand_forest(mtry = tune(), trees = 1000, min_n = tune()) %>%
+
+# Setting Up The Boosted Regression Tree Framework
+# don't forget to add something to engine to ensure internal brt assessment
+# and the external cross-validation are using the same accuracy metric 
+#   set_engine("xgboost", objective = 'binary:logistic', eval_metric = 'logloss')
+xgb_spec <- boost_tree(trees = 1000, 
+                       tree_depth = tune(), 
+                       min_n = tune(),
+                       mtry = tune(),
+                       sample_size = tune(),
+                       learn_rate = tune()) %>%
   set_mode("classification") %>%
-  set_engine("ranger", importance = "permutation", seed = 123) # Creates a model specification.  
-rf_workflow <- workflow() %>% # Creates a workflow and then adds our model spec and recipe to it. 
+  set_engine("xgboost", importance = "permutation", seed = 123)
+xgb_wf <- workflow() %>%
   add_recipe(envt_recipe) %>%
-  add_model(random_forest)
-rf_grid <- grid_regular(mtry(range = c(2, dim(juiced)[2])), min_n(range = c(2, dim(juiced)[1])), levels = 30) # Creates a grid of hyperparameter values to try
+  add_model(xgb_spec)
+
+set.seed(123)
+xgb_grid <- grid_max_entropy(
+  tree_depth(c(3L, 12L)), # tree depth
+  min_n(c(1L, 10L)), # minimal tip size (I think)
+  mtry(c(2L, 15)), # number of predictors used for each tree
+  sample_prop(c(0.4, 0.8)), # proportion of data to be used for each tree fit
+  learn_rate(c(-2, -1)), # shrinkage parameter determines contribution of each tree to growing model - low learning rate is regularising
+  size = 600)
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -113,39 +129,29 @@ rf_grid <- grid_regular(mtry(range = c(2, dim(juiced)[2])), min_n(range = c(2, d
 all_cores <- parallel::detectCores(logical = FALSE)
 cl <- makePSOCKcluster(all_cores)
 registerDoParallel(cl)
-clusterEvalQ(cl, {library(tidymodels)})
-
-set.seed(345)
-tune_res <- tune_grid(object = rf_workflow,
-                      resamples = cv_splits,
-                      grid = rf_grid,
-                      #metrics = perf_metrics, # if not set, does accuracy and roc_auc automatically
-                      control = control_resamples(save_pred = TRUE))
+clusterEvalQ(cl, {library(tidymodels); library(finetune)})
+set.seed(234)
+xgb_word_rs <- tune_grid(object = xgb_wf,
+                         resamples = cv_splits, 
+                         grid = xgb_grid,
+                         #metrics = perf_metrics,
+                         control = control_resamples(save_pred = TRUE))
 stopCluster(cl)
 
-# Evaluating Performance
-tune_res %>%
-  collect_metrics() %>%
-  filter(.metric == "accuracy") %>%
-  mutate(min_n = factor(min_n)) %>%
-  ggplot(aes(mtry, mean, color = min_n)) +
-  geom_line(alpha = 0.5, size = 1.5) +
-  geom_point() +
-  labs(y = "accuracy")
+############
 
-tune_res %>%
+# Evaluating Performance
+xgb_word_rs %>%
   collect_metrics() %>%
   filter(.metric == "roc_auc") %>%
-  mutate(min_n = factor(min_n)) %>%
-  ggplot(aes(mtry, mean, color = min_n)) +
-  geom_line(alpha = 0.5, size = 1.5) +
-  geom_point() +
-  labs(y = "roc_auc")
-
-collect_predictions(tune_res) %>%
-  group_by(id) %>%
-  roc_curve(peaks, .pred_one) %>%
-  autoplot()
+  dplyr::select(mean, mtry:sample_size ) %>%
+  pivot_longer(mtry:sample_size,
+               values_to = "value",
+               names_to = "parameter") %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(alpha = 0.8, show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "rmse")
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -154,15 +160,17 @@ collect_predictions(tune_res) %>%
 #######################################################################################################
 
 # Exploring Quality of Fit and Selecting the Best Model 
-show_best(tune_res, "roc_auc")
-show_best(tune_res, "accuracy")
-best_rmse <- select_best(tune_res, "roc_auc")
+show_best(xgb_word_rs, "roc_auc")
+show_best(xgb_word_rs, "accuracy")
+best_rmse <- select_best(xgb_word_rs, "roc_auc")
 
 # Extracting and plotting raw predictions
-raw_predictions <- tune_res %>%
+raw_predictions <- xgb_word_rs %>% # can also access predictions through xgb_word_rs$.predictions
   collect_predictions()
 raw_pred_best_hyp <- raw_predictions %>%
-  dplyr::filter(mtry == best_rmse$mtry, min_n == best_rmse$min_n)
+  dplyr::filter(mtry == best_rmse$mtry, min_n == best_rmse$min_n,
+                tree_depth == best_rmse$tree_depth, learn_rate == best_rmse$learn_rate,
+                sample_size == best_rmse$sample_size)
 order_raw_pred_best_hyp <- raw_pred_best_hyp %>%
   dplyr::arrange(., .row)
 
@@ -178,6 +186,13 @@ fold_mean <- order_raw_pred_best_hyp %>%
   summarise(prop = sum(.pred_class == peaks)/n())
 mean(fold_mean$prop)
 
+xgb_word_rs %>%
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  dplyr::filter(mtry == best_rmse$mtry, min_n == best_rmse$min_n,
+                tree_depth == best_rmse$tree_depth, learn_rate == best_rmse$learn_rate,
+                sample_size == best_rmse$sample_size)
+
 # Checking performance on the different categories - VERY poor performance on 2 peaks, good on 1 peak
 one_peak <- order_raw_pred_best_hyp$peaks == "one"
 two_peak <- order_raw_pred_best_hyp$peaks == "two"
@@ -190,28 +205,28 @@ sum(order_raw_pred_best_hyp$.pred_class[two_peak] == order_raw_pred_best_hyp$pea
 ##                                                                                                   ##
 #######################################################################################################
 # Finalising Workflow With Best Hyperparameter Values  
-random_forest_final <- rf_workflow %>%
+xgb_final <- xgb_wf %>%
   finalize_workflow(best_rmse)
 
 # Fitting a Random Forest With These Tuned Hyperparameters to the Entire Training Dataset
 #  Note - random_forest_final has same recipe implicitly in there, so will process this data
 #         according to that recipe. Important if you've got something in there that changes 
 #         number of datapoints so as step_rose for oversampling. 
-final_random_forest_fit <- random_forest_final %>%
+final_xgb_fit <- xgb_final %>%
   fit(data = rf_train)
 
 # Evaluating Accuracy of Model Fit on Full Training Data - These are OOS Predictions Using Pruned Trees
-final_train_predictions <- final_random_forest_fit$fit$fit$fit$predictions
+final_train_predictions <- final_xgb_fit$fit$fit$fit$predictions
 final_train_predictions <- ifelse(final_train_predictions[, 1] > 0.50, "one", "two")
 sum(final_train_predictions == rf_train$peaks)/length(rf_train$peaks)
 
 # Predicting On Training Data Using Whole Forest of Trees (Not Good Idea to Do, Just for Comparison With Above)
-train_full_forest_pred <- predict(final_random_forest_fit, rf_train)
+train_full_forest_pred <- predict(final_xgb_fit, rf_train)
 sum(rf_train$peaks == train_full_forest_pred$.pred_class)/length(train_full_forest_pred$.pred_class)
 table(rf_train$peaks, train_full_forest_pred$.pred_class) # note good performance on 1 peak, poor performance on 2 peaks
 
 # Predicting On Test Data Using Whole Forest of Trees
-test_full_forest_pred <- predict(final_random_forest_fit, rf_test)
+test_full_forest_pred <- predict(final_xgb_fit, rf_test)
 sum(rf_test$peaks == test_full_forest_pred$.pred_class)/length(test_full_forest_pred$.pred_class)
 table(rf_test$peaks, test_full_forest_pred$.pred_class) # note good performance on 1 peak, poor performance on 2 peaks
 
@@ -226,7 +241,8 @@ table(rf_test$peaks, test_full_forest_pred$.pred_class) # note good performance 
 #   Note: To get training data (OOS pruned tree) predictions which are identical to final_train_predictions
 #         above, run extract_workflow() and then go to $fit$fit$fit$predictions
 unregister_dopar()
-final_res <- random_forest_final %>%
+set.seed(345)
+final_res <- xgb_final %>%
   last_fit(rf_split) 
 
 # Calculating variable importance
@@ -242,7 +258,7 @@ sum(final_res$.predictions[[1]]$peaks == final_res$.predictions[[1]]$.pred_class
 table(final_res$.predictions[[1]]$peaks, final_res$.predictions[[1]]$.pred_class) # note that still getting poor performance on two peaks
 
 explainer <- explain_tidymodels(
-  model = final_random_forest_fit,
+  model = final_xgb_fit,
   data = dplyr::select(rf_train, -peaks),
   y = as.numeric(rf_train$peaks),
   verbose = FALSE
@@ -250,7 +266,7 @@ explainer <- explain_tidymodels(
 
 pdp_time <- model_profile(
   explainer,
-  variables = "population_per_1km", 
+  variables = "LC_10", 
   N = NULL)
 plot(pdp_time)
 
