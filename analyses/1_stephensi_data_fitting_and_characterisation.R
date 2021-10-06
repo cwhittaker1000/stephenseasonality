@@ -296,7 +296,8 @@ urban_rural <- overall$city
 tab <- table(clustering_results$cluster, urban_rural)
 tab <- tab[, 2:3]
 chisq.test(tab)
-table(features[, "peaks"], urban_rural)
+x <- table(features[, "peaks"], urban_rural)
+chisq.test(x[1:2, 2:3])
 colours <- palette()[1:2]
 timepoints <- seq(0, 12, length = dim(normalised_output)[2])
 locs <- c("Urban", "Rural")
