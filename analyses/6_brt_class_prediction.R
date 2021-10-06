@@ -74,6 +74,7 @@ rf_test <- testing(rf_split)
 #      to look up downsampling. 
 envt_recipe <- recipe(peaks  ~ ., data = rf_train) %>%
   update_role(country, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
+  step_log(population_per_1km) %>%
   step_center(all_predictors()) %>% 
   step_scale(all_predictors()) %>%
   step_nzv(all_predictors(), freq_cut = 80/20) %>% # remove variables that are sparse and unbalanced - remove where >80% of variable values are same value
@@ -89,7 +90,7 @@ correlation_matrix <- cor(juiced[, -rem_index])
 corrplot(correlation_matrix, type="upper", order="hclust", col = brewer.pal(n=8, name="RdYlBu"))
 
 # Generating CV Folds and Selecting the Performance Metric We'll Evaluate Each Time  
-cv_splits <- vfold_cv(rf_train, v = 6) # v sets number of splits
+cv_splits <- vfold_cv(rf_train, v = 6, strata = peaks) # v sets number of splits
 #perf_metrics <- metric_set(yardstick::accuracy)
 #perf_metrics <- metric_set(yardstick::roc_auc)
 
@@ -98,6 +99,19 @@ cv_splits <- vfold_cv(rf_train, v = 6) # v sets number of splits
 # don't forget to add something to engine to ensure internal brt assessment
 # and the external cross-validation are using the same accuracy metric 
 #   set_engine("xgboost", objective = 'binary:logistic', eval_metric = 'logloss')
+# https://xgboost.readthedocs.io/en/latest/parameter.html
+
+## ACTUALLY I DON'T THINK EVAL_METRIC IS HAVING ANY EFFECT HERE (WHICH MAKES SENSE AS THE RESULTS DIDN'T CHANGE)
+# ONLY HAS AN EFFECT IF WITHIN XGBOOST, YOU SET THE ARGUMENT "EVALS" TO CONTAIN SOME DATA. 
+# EVALS IS INSTANCE OF TRAINING DATA WITHIN THE XGBOOST TRAINING (I.E. EVALUATED EACH TIME WHILST TRAINING THE SINGLE BRT)
+# AND EVAL_METRIC SPECIFIES HOW TO EVALUATE THE MODEL FIT TO EVALS. 
+# SEE EVALS DESCRIPTION HERE: https://xgboost.readthedocs.io/en/latest/python/python_api.html
+# I THINK THE OBJECTIVE WILL CHANGE THINGS THOUGH, AS IT "PROVIDES GRADIENT INFORMATION": 
+# https://xgboost.readthedocs.io/en/latest/tutorials/custom_metric_obj.html
+# And this gradient information is what's used by XGBoost (rather than entropy or Gini indices):
+# see https://inblog.in/XGBoost-as-Regressor-and-Classifier-4IVqLERTn8 for further information on how this
+# is used. Hessian of Loss, so as long as Loss is differentiable, you can probably do something with it.
+# But this leads me to believe setting objective *DOES* have an effect. 
 xgb_spec <- boost_tree(trees = 1000, 
                        tree_depth = tune(), 
                        min_n = tune(),
@@ -105,7 +119,8 @@ xgb_spec <- boost_tree(trees = 1000,
                        sample_size = tune(),
                        learn_rate = tune()) %>%
   set_mode("classification") %>%
-  set_engine("xgboost", importance = "permutation", seed = 123)
+  set_engine("xgboost", importance = "permutation", seed = 123,
+             objective = 'binary:logistic', eval_metric = 'auc')
 xgb_wf <- workflow() %>%
   add_recipe(envt_recipe) %>%
   add_model(xgb_spec)
@@ -164,6 +179,14 @@ show_best(xgb_word_rs, "roc_auc")
 show_best(xgb_word_rs, "accuracy")
 best_rmse <- select_best(xgb_word_rs, "roc_auc")
 
+collect_predictions(xgb_word_rs) %>%
+  dplyr::filter(mtry == best_rmse$mtry, min_n == best_rmse$min_n,
+                tree_depth == best_rmse$tree_depth, learn_rate == best_rmse$learn_rate,
+                sample_size == best_rmse$sample_size) %>%
+  group_by(id) %>%
+  roc_curve(peaks, .pred_one) %>%
+  autoplot()
+
 # Extracting and plotting raw predictions
 raw_predictions <- xgb_word_rs %>% # can also access predictions through xgb_word_rs$.predictions
   collect_predictions()
@@ -216,6 +239,8 @@ final_xgb_fit <- xgb_final %>%
   fit(data = rf_train)
 
 # Evaluating Accuracy of Model Fit on Full Training Data - These are OOS Predictions Using Pruned Trees
+# CANT FIND THE EQUIVALENT OF THIS FOR XGB OBJECTS JUST YET - QUESTION ASKED AT RSTUDIO COMMUNITY AND STACK OVERFLOW
+# WAITING TO HEAR RESPONSES BACK 
 final_train_predictions <- final_xgb_fit$fit$fit$fit$predictions
 final_train_predictions <- ifelse(final_train_predictions[, 1] > 0.50, "one", "two")
 sum(final_train_predictions == rf_train$peaks)/length(rf_train$peaks)
@@ -241,7 +266,7 @@ table(rf_test$peaks, test_full_forest_pred$.pred_class) # note good performance 
 #   Note: To get training data (OOS pruned tree) predictions which are identical to final_train_predictions
 #         above, run extract_workflow() and then go to $fit$fit$fit$predictions
 unregister_dopar()
-set.seed(345)
+set.seed(1345)
 final_res <- xgb_final %>%
   last_fit(rf_split) 
 
@@ -269,8 +294,6 @@ pdp_time <- model_profile(
   variables = "LC_10", 
   N = NULL)
 plot(pdp_time)
-
-colnames(juiced)
 
 
 ####################################################

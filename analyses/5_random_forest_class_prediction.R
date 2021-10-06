@@ -75,10 +75,11 @@ rf_test <- testing(rf_split)
 #      to look up downsampling. 
 envt_recipe <- recipe(peaks  ~ ., data = rf_train) %>%
   update_role(country, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
+  step_log(population_per_1km) %>%
   step_center(all_predictors()) %>% 
   step_scale(all_predictors()) %>%
   step_nzv(all_predictors(), freq_cut = 80/20) %>% # remove variables that are sparse and unbalanced - remove where >80% of variable values are same value
-  step_corr(all_predictors(), threshold = 0.65)
+  step_corr(all_predictors(), threshold = 0.65) 
   #step_rose(peaks) 
 envt_prepped <- prep(envt_recipe, training = rf_train, verbose = TRUE)
 juiced <- juice(envt_prepped)
@@ -90,18 +91,36 @@ correlation_matrix <- cor(juiced[, -rem_index])
 corrplot(correlation_matrix, type="upper", order="hclust", col = brewer.pal(n=8, name="RdYlBu"))
 
 # Generating CV Folds and Selecting the Performance Metric We'll Evaluate Each Time  
-cv_splits <- vfold_cv(rf_train, v = 6) # v sets number of splits
+cv_splits <- vfold_cv(rf_train, v = 6, strata = peaks) # v sets number of splits
 #perf_metrics <- metric_set(yardstick::accuracy)
 #perf_metrics <- metric_set(yardstick::roc_auc)
 
 # Setting Up The Random Forest Framework
+# don't forget to add something to engine to ensure internal brt assessment
+# and the external cross-validation are using the same accuracy metric 
+#   set_engine("xgboost", objective = 'binary:logistic', eval_metric = 'logloss')
+# https://xgboost.readthedocs.io/en/latest/parameter.html
+# NOTE - I DO THE ABOVE FOR XGBOOST, SHOULD I BE DOING SOMETHING SIMILAR HERE TO
+# ENSURE ACCURACY/ROC_AUC IS THE UNDERLYING THING BEING OPTIMISED WITHIN EACH DECISION TREE
+# Note here also that https://www.rdocumentation.org/packages/ranger/versions/0.13.1/topics/ranger
+# there are lots more arguments to ranger that one can play with (e.g. sample.fraction)
+# Also notes that for classification trees, in Ranger they're grown according to the Gini Index, which is
+# used as a splitting rule. (Can also use Cross-Entropy). See here: https://www.displayr.com/how-is-splitting-decided-for-decision-trees/ for further info. 
+# And https://www.displayr.com/how-random-forests-fit-to-data/ for some more information. 
+# The above are discussed in further detail here: https://en.wikipedia.org/wiki/Decision_tree_learning#Metrics
+# Basically, there are some defined objectives that decision tree learning attempts to minimise. 
+# Think probably one could in theory use other loss functions, but not within Ranger, not within tidymodels,
+# and not without manually doing it yourself (even then, I'm unsure theoretically whether it's legit). 
+# This post distinguishes between training loss and validation loss, which is a helpful way of understanding
+# things, and I found it helpful: https://towardsdatascience.com/custom-loss-functions-for-gradient-boosting-f79c1b40466d
+# tl;dr Ranger doesn't offer custom training loss functions currently. So that's fine. 
 random_forest <- rand_forest(mtry = tune(), trees = 1000, min_n = tune()) %>%
   set_mode("classification") %>%
   set_engine("ranger", importance = "permutation", seed = 123) # Creates a model specification.  
 rf_workflow <- workflow() %>% # Creates a workflow and then adds our model spec and recipe to it. 
   add_recipe(envt_recipe) %>%
   add_model(random_forest)
-rf_grid <- grid_regular(mtry(range = c(2, dim(juiced)[2])), min_n(range = c(2, dim(juiced)[1])), levels = 30) # Creates a grid of hyperparameter values to try
+rf_grid <- grid_regular(mtry(range = c(2, dim(juiced)[2]-5)), min_n(range = c(2, dim(juiced)[1] - 10)), levels = 25) # Creates a grid of hyperparameter values to try
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -115,6 +134,9 @@ cl <- makePSOCKcluster(all_cores)
 registerDoParallel(cl)
 clusterEvalQ(cl, {library(tidymodels)})
 
+# note it appears that juicing occurs post splits inside this, which means
+# that sometimes, different predictors get removed because smaller sample size
+# changes the correlations meaningfully. Unclear how much of a problem this actually is. 
 set.seed(345)
 tune_res <- tune_grid(object = rf_workflow,
                       resamples = cv_splits,
@@ -142,11 +164,6 @@ tune_res %>%
   geom_point() +
   labs(y = "roc_auc")
 
-collect_predictions(tune_res) %>%
-  group_by(id) %>%
-  roc_curve(peaks, .pred_one) %>%
-  autoplot()
-
 #######################################################################################################
 ##                                                                                                   ##
 ##      Selecting the Best Fitting Set of Hyperparameters and Exploring Out-of-Bag Predictions       ##
@@ -157,6 +174,12 @@ collect_predictions(tune_res) %>%
 show_best(tune_res, "roc_auc")
 show_best(tune_res, "accuracy")
 best_rmse <- select_best(tune_res, "roc_auc")
+
+collect_predictions(tune_res) %>%
+  dplyr::filter(mtry == best_rmse$mtry, min_n == best_rmse$min_n) %>%
+  group_by(id) %>%
+  roc_curve(peaks, .pred_one) %>%
+  autoplot()
 
 # Extracting and plotting raw predictions
 raw_predictions <- tune_res %>%
@@ -253,8 +276,6 @@ pdp_time <- model_profile(
   variables = "population_per_1km", 
   N = NULL)
 plot(pdp_time)
-
-colnames(juiced)
 
 
 ####################################################
