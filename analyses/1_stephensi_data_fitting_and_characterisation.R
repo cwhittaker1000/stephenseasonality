@@ -13,7 +13,7 @@ source(here("functions", "time_series_characterisation_functions.R"))
 source(here("functions", "gp_fitting_functions.R"))
 
 # Loading in extracted stephensi data and renaming variables
-raw_df <- read.csv(file = here("data", "raw", "extracted_data.csv"), stringsAsFactors = FALSE)
+raw_df <- read.csv(file = here("data", "systematic_review_results", "extracted_entomological_data.csv"), stringsAsFactors = FALSE)
 df <- raw_df[1:85, ] %>%
   select(Time.Series.ID, Multiply.By., Month_Start, `Jan`:`Dec.4`) %>%
   rename(id = Time.Series.ID, multiply = Multiply.By., start = Month_Start) %>%
@@ -26,7 +26,7 @@ new_df <- matrix(nrow = 85, ncol = 12)
 for (i in 1:85) {
   
   # Load in individual time series
-  initial_ts <- as.numeric(df[i, 4:63])
+  initial_ts <- as.numeric(df[i, 4:(dim(df)[2])])
   initial_ts <- na.trim(initial_ts)
   if (i == 16) { # use only Year 1988 for Ansari 1990
     initial_ts <- tail(initial_ts, 12)
@@ -74,6 +74,7 @@ for (i in 1:85) {
 ##                                                                                                   ##
 #######################################################################################################
 #options(mc.cores = parallel::detectCores() - 4)
+set.seed(10)
 fresh_run <- FALSE
 prior <- "informative"
 interpolating_points <- 2
@@ -96,13 +97,14 @@ for (i in retain_index) {
   #browser()
 }
 
+# Saving the processed (to make 12 months) but unsmoothed results + relevant metadata
 metadata <- raw_df[retain_index, ] %>%
   select(Time.Series.ID, Country, Admin.1, Admin.2, City., Year.Start, Year.End) %>%
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2, city = City., 
          start = Year.Start, end = Year.End)
 overall <- cbind(metadata, new_df[retain_index, ])
 colnames(overall)[8:19] <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-saveRDS(overall, file = here("data", "processed", "metadata_and_processed_counts.rds"))
+saveRDS(overall, file = here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
 table(metadata$country)  
 table(metadata$city)  
 
@@ -117,6 +119,7 @@ table(metadata$city)
 #######################################################################################################
 
 # Generating the Time Series Features
+set.seed(10)
 mean_realisation <- matrix(nrow = length(retain_index), ncol = (12 * interpolating_points + 1))
 features <- matrix(nrow = length(retain_index), ncol = 8)
 colnames(features) <- c("entropy", "period", "prop_points", "jan_dist", "peaks", "mean", "weight", "per_ind_4_months")
@@ -176,7 +179,7 @@ for (i in 1:length(retain_index)) {
 
 features_df <- data.frame(id = metadata$id, country = metadata$country, admin1 = metadata$admin1, admin2 = metadata$admin2,
                           cit = metadata$city, features)
-saveRDS(features_df, file = here("data", "processed", "metadata_and_time_series_features.rds"))
+saveRDS(features_df, file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -203,7 +206,7 @@ clustering_results <- kmeans(PCA_output[, 1:4], num_clust, nstart = 20)
 
 cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, 
                              cluster = clustering_results$cluster, mean_realisation)
-saveRDS(cluster_output, file = here("data", "processed", "cluster_membership.rds"))
+saveRDS(cluster_output, file = here("data", "systematic_review_results", "cluster_membership.rds"))
 
 # Visualising the time-series belonging to each cluster
 colours <- palette()[1:num_clust]
@@ -289,7 +292,6 @@ for (i in 1:(length(unique(interval)) - 1)) {
   text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
   text(6.5, 9.5, paste0("Entropy = ", round(entropy, 0)), cex = 1.5, col = "grey20")
 }
-
 
 # Visualising the time-series belonging to urban/rural
 urban_rural <- overall$city

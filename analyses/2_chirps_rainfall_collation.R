@@ -10,9 +10,9 @@ gm <- import("geemap")
 ee_check() # Check non-R dependencies
 
 # Load metadata and admin 2 units
-metadata <- readRDS(here("data", "processed", "metadata_and_processed_counts.rds"))
-admin2 <- readRDS(here("data", "processed", "simplified_admin2.rds"))
-admin1 <- readRDS(here("data", "processed", "simplified_admin1.rds"))
+metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
+admin2 <- readRDS(here("data", "admin_units", "simplified_admin2.rds"))
+admin1 <- readRDS(here("data", "admin_units", "simplified_admin1.rds"))
 
 # Extracting CHIRPS rainfall data
 for (i in 1:nrow(metadata)) {
@@ -62,7 +62,7 @@ for (i in 1:nrow(metadata)) {
   x$day <- days[1:nrow(x)]
   x$time_series_id <- metadata$id[i]
 
-  write.csv(x, file = here("data", "processed", "location_specific_rainfall", paste0("rainfall_ts", metadata$id[i], ".csv")), row.names = FALSE)
+  write.csv(x, file = here("data", "location_specific_rainfall", paste0("rainfall_ts", metadata$id[i], ".csv")), row.names = FALSE)
     
   print(c(i, dim(x)[1]))
   

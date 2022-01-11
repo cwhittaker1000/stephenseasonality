@@ -17,8 +17,8 @@ source(here("functions", "time_series_characterisation_functions.R"))
 ##          Loading In Collated Environmental Data, and Time Series Temporal Properties              ##
 ##                                                                                                   ##
 #######################################################################################################
-ts_metadata <- readRDS(here("data", "processed", "metadata_and_time_series_features.rds"))
-envt_variables <- read.csv(here("data", "processed", "location_ecological_data.csv")) %>%
+ts_metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
+envt_variables <- read.csv(here("data", "systematic_review_results", "location_ecological_data.csv")) %>%
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
   group_by(id, country, admin1, admin2) %>%
   summarise(across(population_per_1km:worldclim_9, ~ mean(.x, na.rm = TRUE)))
@@ -145,18 +145,6 @@ ames_mixture_final %>%
   geom_col() +
   scale_x_continuous(expand = c(0, 0)) +
   labs(y = NULL)
-
-
-
-
-
-
-
-
-
-
-
-
 
 subset <- overall %>%
   dplyr::select(id, entropy:weight, population_per_1km, EVI, worldclim_1:worldclim_9) %>%

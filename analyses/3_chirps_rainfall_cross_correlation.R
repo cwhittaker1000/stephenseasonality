@@ -14,19 +14,19 @@ library(rstan); library(ggplot2); library(invgamma); library(tictoc); library(De
 ##                                                                                                   ##
 #######################################################################################################
 # Load metadata and processed (but non-smoothed) monthly mosquito catch data
-metadata <- readRDS(here("data", "processed", "metadata_and_processed_counts.rds"))
+metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
 processed_metadata <- metadata %>%
-  select(id, city, Jan:Dec)  %>%
+  dplyr::select(id, city, Jan:Dec)  %>%
   tidyr::pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "catch")
-cluster <- readRDS(here("data", "processed", "cluster_membership.rds")) %>%
-  select(id, cluster)
+cluster <- readRDS(here("data", "systematic_review_results", "metadata_and_cluster_membership.rds")) %>%
+  dplyr::select(id, cluster)
 
 # Generating monthly rainfall (for comparison to raw, unsmoothed catch data)
 monthly_sum_rainfall_storage <- matrix(nrow = nrow(metadata), ncol = 12)
-rainfall_files <- list.files(here("data", "processed", "location_specific_rainfall"))
+rainfall_files <- list.files(here("data", "location_specific_rainfall"))
 id <- metadata$id
 for (i in 1:nrow(metadata)) {
-  temp_rainfall <- read.csv(paste0(here("data", "processed", "location_specific_rainfall"), "/rainfall_ts", id[i], ".csv"), stringsAsFactors = FALSE)
+  temp_rainfall <- read.csv(paste0(here("data", "location_specific_rainfall"), "/rainfall_ts", id[i], ".csv"), stringsAsFactors = FALSE)
   temp_rainfall$month <- format(as.Date(temp_rainfall$day), "%m")
   temp_rainfall <- temp_rainfall %>%
     group_by(month) %>%
@@ -118,7 +118,7 @@ if (length == 25) {
 }
 id <- metadata$id
 for (i in 1:length(metadata$id)) {
-  temp_rainfall <- read.csv(paste0(here("data", "processed", "location_specific_rainfall"), "/rainfall_ts", id[i], ".csv"), stringsAsFactors = FALSE)
+  temp_rainfall <- read.csv(paste0(here("data", "location_specific_rainfall"), "/rainfall_ts", id[i], ".csv"), stringsAsFactors = FALSE)
   temp_summed <- c()
   rainfall <- temp_rainfall$rainfall
   leap <- ifelse(length(rainfall == 365), FALSE, TRUE)
@@ -181,7 +181,8 @@ colnames(smooth_upper_plot) <- paste0("X", seq(0, 12, length.out = length(colnam
 smooth_upper_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, smooth_upper_plot) %>%
   pivot_longer(X0:X12, names_to = "point", values_to = "upper_fitted_catch")
 
-raw_plot <- metadata %>% select(Jan:Dec)
+raw_plot <- metadata %>% 
+  dplyr::select(Jan:Dec)
 colnames(raw_plot) <- paste0("X", seq(0.5, 11.5, length.out = length(colnames(raw_plot))))
 raw_plot <- data.frame(id = cluster$id, cluster = cluster$cluster, raw_plot) %>%
   pivot_longer(X0.5:X11.5, names_to = "point", values_to = "raw_catch")
@@ -207,8 +208,7 @@ overall_plot <- overall_plot %>%
 
 max_record <- overall_plot %>%
   group_by(id) %>%
-  summarise(max_val = max(upper_norm, raw_norm, na.rm = TRUE),
-            )
+  summarise(max_val = max(upper_norm, raw_norm, na.rm = TRUE))
 
 overall_plot <- overall_plot %>%
   left_join(max_rain, by = "id") %>%
@@ -222,8 +222,8 @@ overall_plot <- overall_plot %>%
   left_join(city, by = "id")
 
 # Example Plot
-x <- overall_plot[overall_plot$id %in% c(1:100), ]
-y <- overall_plot[overall_plot$id %in% c(1:100) & !is.na(overall_plot$mean_fitted_catch), ]
+x <- overall_plot[overall_plot$id %in% c(1:2), ]
+y <- overall_plot[overall_plot$id %in% c(1:2) & !is.na(overall_plot$mean_fitted_catch), ]
 
 ggplot() +
   geom_bar(data = x, aes(x = point, y = scaled_rain), stat = "identity", col = adjustcolor("#D1E6F0", alpha.f = 1), fill = "#D1E6F0", alpha = 1, width = 0.49) +

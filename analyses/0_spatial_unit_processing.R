@@ -7,7 +7,7 @@ library(dplyr); library(raster); library(rgdal); library(sf); library(raster); l
 library(tidyverse); library(here)
 
 # Loading in admin 0 units, simplifying and saving
-admin0 <- readRDS(here("data", "raw", "raw_gadm_shapefiles", "level0.rds"))
+admin0 <- readRDS(here("data", "raw_gadm_shapefiles", "level0.rds"))
 admin0 <- admin0[!is.na(admin0$NAME_0), ]
 countries <- c("Afghanistan", "Armenia", "Azerbaijan", "Bangladesh", "Bhutan", "Cambodia", "China", "Djibouti", "Egypt", 
                "Ethiopia", "India", "Israel", "Iraq", "Iran", "Jordan", "Kenya", "Kyrgyzstan",
@@ -15,75 +15,39 @@ countries <- c("Afghanistan", "Armenia", "Azerbaijan", "Bangladesh", "Bhutan", "
                "Somalia", "South Sudan", "Sudan", "Syria", "Tajikistan", "Thailand", "Turkey", "Turkmenistan", "Uzbekistan",
                "Vietnam", "Yemen")
 admin0 <- admin0[admin0$NAME_0 %in% countries, ]
-saveRDS(admin0, here("data", "processed", "complex_admin0.rds"))
+saveRDS(admin0, here("data", "admin_units", "complex_admin0.rds"))
 for (i in 1:nrow(admin0)) {
   temp <- admin0$geometry[i]
   reduce <- st_simplify(temp, dTolerance = 5000)
-  #print(c(object.size(temp), object.size(reduce)))
-  #plot(temp)
-  #plot(reduce, add = TRUE, type = "l", col = "red")
   admin0$geometry[i] <- reduce
-  print(i)
-  #browser()
 }
-saveRDS(admin0, here("data", "processed", "simplified_admin0.rds"))
+saveRDS(admin0, here("data", "admin_units", "simplified_admin0.rds"))
 
 # Loading in admin 1 units, simplifying and saving
-admin1 <- readRDS(here("data", "raw", "raw_gadm_shapefiles", "level1.rds"))
+admin1 <- readRDS(here("data", "raw_gadm_shapefiles", "level1.rds"))
 admin1 <- admin1[!is.na(admin1$NAME_0), ]
 countries <- c("Afghanistan", "Djibouti", "Ethiopia", "India",  "Iran", "Myanmar", "Pakistan", "Saudi Arabia")
 admin1 <- admin1[admin1$NAME_0 %in% countries, ]
-saveRDS(admin1, here("data", "processed", "complex_admin1.rds"))
+saveRDS(admin1, here("data", "admin_units", "complex_admin1.rds"))
 for (i in 1:nrow(admin1)) {
   temp <- admin1$geometry[i]
   reduce <- st_simplify(temp, dTolerance = 3500)
-  #print(c(object.size(temp), object.size(reduce)))
-  #plot(temp)
-  #plot(reduce, add = TRUE, type = "l", col = "red")
   admin1$geometry[i] <- reduce
-  print(i)
-  #browser()
 }
-saveRDS(admin1, here("data", "processed", "simplified_admin1.rds"))
-
+saveRDS(admin1, here("data", "admin_units", "simplified_admin1.rds"))
 
 # Loading in admin 2 units, simplifying and saving
-admin2 <- readRDS(here("data", "raw", "raw_gadm_shapefiles/", "level2.rds"))
+admin2 <- readRDS(here("data", "raw_gadm_shapefiles/", "level2.rds"))
 admin2 <- admin2[!is.na(admin2$NAME_0), ]
 countries <- c("Afghanistan", "Djibouti", "Ethiopia", "India",  "Iran", "Myanmar", "Pakistan", "Saudi Arabia")
 admin2 <- admin2[admin2$NAME_0 %in% countries, ]
-saveRDS(admin2, here("data", "processed", "complex_admin2.rds"))
-#samples <- sample(seq(1:1447), 100)
-#samples <- samples[order(samples)]
+saveRDS(admin2, here("data", "admin_units", "complex_admin2.rds"))
 for (i in 1:nrow(admin2)) {
   temp <- admin2$geometry[i]
   reduce <- st_simplify(temp, dTolerance = 1000)
-  #if (i %in% samples) {
-  #  print(c(object.size(temp), object.size(reduce)))
-  #  plot(temp)
-  #  plot(reduce, add = TRUE, type = "l", col = "red")
-  #  browser()
-  #}
   admin2$geometry[i] <- reduce
-  print(i)
 }
-saveRDS(admin2, here("data", "processed", "simplified_admin2.rds"))
-
-# Checking everything has worked okay
-complex_admin_0 <- readRDS(here("data", "processed", "complex_admin0.rds"))
-simple_admin_0 <- readRDS(here("data", "processed", "simplified_admin0.rds"))
-plot(complex_admin_0$geometry[10])
-plot(simple_admin_0$geometry[10], add = TRUE, type = "l", col = "red")
-
-complex_admin_1 <- readRDS(here("data", "processed", "complex_admin1.rds"))
-simple_admin_1 <- readRDS(here("data", "processed", "simplified_admin1.rds"))
-plot(complex_admin_1$geometry[10])
-plot(simple_admin_1$geometry[10], add = TRUE, type = "l", col = "red")
-
-complex_admin_2 <- readRDS(here("data", "processed", "complex_admin2.rds"))
-simple_admin_2 <- readRDS(here("data", "processed", "simplified_admin2.rds"))
-plot(complex_admin_2$geometry[10])
-plot(simple_admin_2$geometry[10], add = TRUE, type = "l", col = "red")
+saveRDS(admin2, here("data", "admin_units", "simplified_admin2.rds"))
 
 # Saving Admin 1 and Admin2 unit names for each country to assist with geolocation
 admin1_csv <- data.frame(country = simple_admin_1$NAME_0, admin1 = simple_admin_1$NAME_1, 
@@ -94,5 +58,21 @@ admin2_csv <- data.frame(country = simple_admin_2$NAME_0,
                          admin2 = simple_admin_2$NAME_2, id2 = simple_admin_2$GID_2,
                          type = simple_admin_2$TYPE_2, alt_names = simple_admin_2$VARNAME_2)
 
-write.csv(admin1_csv, file = here("data", "processed", "admin1_details.csv"), row.names = FALSE)
-write.csv(admin2_csv, file = here("data", "processed", "admin2_details.csv"), row.names = FALSE)
+write.csv(admin1_csv, file = here("data", "admin_units", "admin1_details.csv"), row.names = FALSE)
+write.csv(admin2_csv, file = here("data", "admin_units", "admin2_details.csv"), row.names = FALSE)
+
+# Checking everything has worked okay
+# complex_admin_0 <- readRDS(here("data", "admin_units", "complex_admin0.rds"))
+# simple_admin_0 <- readRDS(here("data", "admin_units", "simplified_admin0.rds"))
+# plot(complex_admin_0$geometry[10])
+# plot(simple_admin_0$geometry[10], add = TRUE, type = "l", col = "red")
+# 
+# complex_admin_1 <- readRDS(here("data", "adm_units", "complex_admin1.rds"))
+# simple_admin_1 <- readRDS(here("data", "admin_units", "simplified_admin1.rds"))
+# plot(complex_admin_1$geometry[10])
+# plot(simple_admin_1$geometry[10], add = TRUE, type = "l", col = "red")
+# 
+# complex_admin_2 <- readRDS(here("data", "admin_units", "complex_admin2.rds"))
+# simple_admin_2 <- readRDS(here("data", "admin_units", "simplified_admin2.rds"))
+# plot(complex_admin_2$geometry[10])
+# plot(simple_admin_2$geometry[10], add = TRUE, type = "l", col = "red")
