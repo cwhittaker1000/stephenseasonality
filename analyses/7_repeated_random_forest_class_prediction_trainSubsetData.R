@@ -62,7 +62,7 @@ iterations_ups <- tibble(iteration = 1, juiced = list(1), best_mtry = 1, best_mi
                          importance = list(1))
 
 # Running Multiple Random Forest Models Varying Seed Each Time
-seeds <- c(234, 284, 102391, 19, 2948457, 294894, 189, 38484902, 284651, 83829, 72645,
+seeds <- c(345, 234, 284, 102391, 19, 2948457, 294894, 189, 38484902, 284651, 83829, 72645,
            204758, 90, 7564, 5647, 8201, 3782, 284621, 98823, 762, 977503, 75759, 34428, 9, 3,
            10, 19, 19029, 8726, 23716, 17278, 92883, 827, 7162, 162, 1282, 8172, 128, 91, 981,
            456, 224, 8743, 362, 81, 9223, 753, 357, 99, 101)
@@ -73,22 +73,28 @@ for (i in 1:number_iterations) {
   set.seed(seeds[i])
   seed <- seeds[i]
   
+  # Creating Test and Training Data
+  set.seed(seed)
+  rf_split <- initial_split(data, prop = 0.85, strata = country_peaks)
+  rf_train <- training(rf_split)
+  rf_test <- testing(rf_split)
+  
   # Prepping Data - Selecting Variables, Creating Recipe - No Upsampling
-  envt_recipe <- recipe(peaks  ~ ., data = data) %>%
+  envt_recipe <- recipe(peaks  ~ ., data = rf_train) %>%
     update_role(country_peaks, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
     step_center(all_numeric()) %>% 
     step_scale(all_numeric()) %>%
     step_nzv(all_numeric(), freq_cut = 8, unique_cut = 25) %>% # remove variables that are sparse and unbalanced - remove where >80% of variable values are same value
     step_corr(all_numeric(), -contains(c("population_per_1km", "temperature_seasonality", "precipitation_seasonality_cv")), threshold = 0.50) %>%
     step_dummy(country)
-  envt_prepped <- prep(envt_recipe, training = data, verbose = TRUE)
+  envt_prepped <- prep(envt_recipe, training = rf_train, verbose = TRUE)
   juiced <- juice(envt_prepped)
   new_envt_recipe <- recipe(peaks ~ ., data = juiced) %>% # have to do this way to ensure recipe isn't applied *within* tune-grid
     update_role(country_peaks, new_role = "ID")           # when we do this, recipe is applied within each fold, and diff covariates are removed for each
   
   # Prepping Data - Selecting Variables, Creating Recipe - Upsampling to Balance Amount of Data for 1 and 2 Peaks
-  set.seed(915)
-  envt_recipe_ups <- recipe(peaks  ~ ., data = data) %>%
+  set.seed(seed)
+  envt_recipe_ups <- recipe(peaks  ~ ., data = rf_train) %>%
     update_role(country_peaks, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
     step_center(all_numeric()) %>% 
     step_scale(all_numeric()) %>%
@@ -96,7 +102,7 @@ for (i in 1:number_iterations) {
     step_corr(all_numeric(), -contains(c("population_per_1km", "temperature_seasonality", "precipitation_seasonality_cv")), threshold = 0.50) %>%
     step_dummy(country) %>%
     step_smote(peaks)
-  envt_prepped_ups <- prep(envt_recipe_ups, training = data, verbose = TRUE)
+  envt_prepped_ups <- prep(envt_recipe_ups, training = rf_train, verbose = TRUE)
   juiced_ups <- juice(envt_prepped_ups)
   new_envt_recipe_ups <- recipe(peaks ~ ., data = juiced_ups) %>% # have to do this way to ensure recipe isn't applied *within* tune-grid
     update_role(country_peaks, new_role = "ID")                   # when we do this, recipe is applied within each fold, and diff covariates are removed for each
@@ -109,14 +115,14 @@ for (i in 1:number_iterations) {
   random_forest$eng_args$seed <- seed
   
   ## No Upsampling
-  cv_splits <- vfold_cv(juiced, v = 6, strata = country_peaks) # cv folds for pre-juiced data (to avoid issues later on with diff variables getting filtered out in each fold)
+  cv_splits <- vfold_cv(juiced, v = 6, strata = peaks) # cv folds for pre-juiced data (to avoid issues later on with diff variables getting filtered out in each fold)
   rf_workflow <- workflow() %>% # Creates a workflow and then adds our model spec and recipe to it. 
     add_recipe(new_envt_recipe) %>%
     add_model(random_forest)
   rf_grid <- grid_regular(mtry(range = c(2, dim(juiced)[2] - round(dim(juiced)[2]/4))), min_n(range = c(2, dim(juiced)[1] - (round(dim(juiced)[1]/3)))), levels = 15) # Creates a grid of hyperparameter values to try
   
   ## Upsampled
-  cv_splits_ups <- vfold_cv(juiced_ups, v = 6, strata = country_peaks) # cv folds for pre-juiced data (to avoid issues later on with diff variables getting filtered out in each fold)
+  cv_splits_ups <- vfold_cv(juiced_ups, v = 6, strata = peaks) # cv folds for pre-juiced data (to avoid issues later on with diff variables getting filtered out in each fold)
   rf_workflow_ups <- workflow() %>% # Creates a workflow and then adds our model spec and recipe to it. 
     add_recipe(new_envt_recipe_ups) %>%
     add_model(random_forest)
@@ -146,6 +152,32 @@ for (i in 1:number_iterations) {
   
   stopCluster(cl)
 
+  tune_res_perf <- tune_res %>%
+    collect_metrics() 
+  tune_res_perf$type <- "no_ups"
+  tune_res_perf_ups <- tune_res_ups %>%
+    collect_metrics() 
+  tune_res_perf_ups$type <- "ups"
+  tune_res_perf_overall <- rbind(tune_res_perf, tune_res_perf_ups)
+  
+  tune_res_perf_overall %>%
+    filter(.metric == "accuracy") %>%
+    mutate(min_n = factor(min_n)) %>%
+    ggplot(aes(mtry, mean, color = min_n)) +
+    geom_line(alpha = 0.5, size = 1.5) +
+    geom_point() + 
+    facet_wrap(~type) +
+    labs(y = "accuracy")
+  
+  tune_res_perf_overall %>%
+    filter(.metric == "roc_auc") %>%
+    mutate(min_n = factor(min_n)) %>%
+    ggplot(aes(mtry, mean, color = min_n)) +
+    geom_line(alpha = 0.5, size = 1.5) +
+    geom_point() +
+    facet_wrap(~type) +
+    labs(y = "roc_auc")
+  
   # Extracting CV Predictions and Evaluating Accuracy
   
   ## No Upsampling
@@ -171,8 +203,8 @@ for (i in 1:number_iterations) {
   cv_accuracy_ups <- sum(cv_predictions_ups$.pred_class == cv_predictions_ups$peaks)/length(cv_predictions_ups$peaks)
   one_peak_ups <- cv_predictions_ups$peaks == "one"
   two_peak_ups <- cv_predictions_ups$peaks == "two"
-  cv_one_peak_accuracy_ups <- sum(cv_predictions_ups$.pred_class[one_peak] == cv_predictions_ups$peaks[one_peak])/length(cv_predictions_ups$peaks[one_peak])
-  cv_two_peak_accuracy_ups <- sum(cv_predictions_ups$.pred_class[two_peak] == cv_predictions_ups$peaks[two_peak])/length(cv_predictions_ups$peaks[two_peak])
+  cv_one_peak_accuracy_ups <- sum(cv_predictions_ups$.pred_class[one_peak_ups] == cv_predictions_ups$peaks[one_peak_ups])/length(cv_predictions_ups$peaks[one_peak_ups])
+  cv_two_peak_accuracy_ups <- sum(cv_predictions_ups$.pred_class[two_peak_ups] == cv_predictions_ups$peaks[two_peak_ups])/length(cv_predictions_ups$peaks[two_peak_ups])
   
   # Selecting the Best Model and Final Fitting
   unregister_dopar()
@@ -182,26 +214,28 @@ for (i in 1:number_iterations) {
     finalize_workflow(best)
   final_random_forest_fit <- random_forest_final %>%
     fit(data = juiced)
-  fit_OOS_preds <- final_random_forest_fit$fit$fit$fit$predictions
-  fit_OOS_preds_df <- data.frame(truth = factor(juiced$peaks), estimate = fit_OOS_preds[, 1])
-  test_roc_auc <- roc_auc(data = fit_OOS_preds_df, truth = truth, estimate)
-  peak_assign <- ifelse(fit_OOS_preds[, 1] > 0.50, "one", "two")
-  test_accuracy <- sum(peak_assign == juiced$peaks)/length(juiced$peaks)
-  test_one_peak_accuracy <- sum(peak_assign[juiced$peaks == "one"] == juiced$peaks[juiced$peaks == "one"])/length(juiced$peaks[juiced$peaks == "one"])
-  test_two_peak_accuracy <- sum(peak_assign[juiced$peaks == "two"] == juiced$peaks[juiced$peaks == "two"])/length(juiced$peaks[juiced$peaks == "two"])
-
+  baked_train <- bake(envt_prepped, rf_test)
+  full_forest_pred <- predict(final_random_forest_fit, baked_train, "prob")
+  full_forest_preds_df <- data.frame(truth = factor(baked_train$peaks), estimate = unname(full_forest_pred[, 1]))
+  test_roc_auc <- roc_auc(data = full_forest_preds_df, truth = truth, estimate)
+  peak_assign <- ifelse(full_forest_pred[, 1] > 0.50, "one", "two")
+  test_accuracy <- unname(sum(peak_assign == rf_test$peaks)/length(rf_test$peaks))
+  test_one_peak_accuracy <- sum(peak_assign[rf_test$peaks == "one"] == rf_test$peaks[rf_test$peaks == "one"])/length(rf_test$peaks[rf_test$peaks == "one"])
+  test_two_peak_accuracy <- sum(peak_assign[rf_test$peaks == "two"] == rf_test$peaks[rf_test$peaks == "two"])/length(rf_test$peaks[rf_test$peaks == "two"])
+  
   ## Upsampling
   random_forest_final_ups <- rf_workflow_ups %>%
     finalize_workflow(best_ups)
   final_random_forest_fit_ups <- random_forest_final_ups %>%
     fit(data = juiced_ups)
-  fit_OOS_preds_ups <- final_random_forest_fit_ups$fit$fit$fit$predictions
-  fit_OOS_preds_df_ups <- data.frame(truth = factor(juiced_ups$peaks), estimate = fit_OOS_preds_ups[, 1])
-  test_roc_auc_ups <- roc_auc(data = fit_OOS_preds_df_ups, truth = truth, estimate)
-  peak_assign_ups <- ifelse(fit_OOS_preds_ups[, 1] > 0.50, "one", "two")
-  test_accuracy_ups <- sum(peak_assign_ups == juiced_ups$peaks)/length(juiced_ups$peaks)
-  test_one_peak_accuracy_ups <- sum(peak_assign_ups[juiced_ups$peaks == "one"] == juiced_ups$peaks[juiced_ups$peaks == "one"])/length(juiced_ups$peaks[juiced_ups$peaks == "one"])
-  test_two_peak_accuracy_ups <- sum(peak_assign_ups[juiced_ups$peaks == "two"] == juiced_ups$peaks[juiced_ups$peaks == "two"])/length(juiced_ups$peaks[juiced_ups$peaks == "two"])
+  baked_train_ups <- bake(envt_prepped_ups, rf_test)
+  full_forest_pred_ups <- predict(final_random_forest_fit_ups, baked_train_ups, "prob")
+  full_forest_preds_df_ups <- data.frame(truth = factor(baked_train_ups$peaks), estimate = unname(full_forest_pred_ups[, 1]))
+  test_roc_auc_ups <- roc_auc(data = full_forest_preds_df_ups, truth = truth, estimate)
+  peak_assign_ups <- ifelse(full_forest_pred_ups[, 1] > 0.50, "one", "two")
+  test_accuracy_ups <- unname(sum(peak_assign_ups == rf_test$peaks)/length(rf_test$peaks))
+  test_one_peak_accuracy_ups <- sum(peak_assign_ups[rf_test$peaks == "one"] == rf_test$peaks[rf_test$peaks == "one"])/length(rf_test$peaks[rf_test$peaks == "one"])
+  test_two_peak_accuracy_ups <- sum(peak_assign_ups[rf_test$peaks == "two"] == rf_test$peaks[rf_test$peaks == "two"])/length(rf_test$peaks[rf_test$peaks == "two"])
   
   # Calculating variable importance
   
@@ -280,3 +314,5 @@ x <- bind_rows(iterations_ups$importance, iterations$importance) %>%
 x <- bind_rows(iterations_ups$importance, iterations$importance) 
 ggplot(x, aes(x= Variable, fill = sampling, y = Importance)) +
   geom_boxplot()
+
+
