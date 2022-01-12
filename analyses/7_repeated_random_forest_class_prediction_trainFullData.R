@@ -24,13 +24,13 @@ unregister_dopar <- function() {
 ##          Loading In Collated Environmental Data, and Time Series Temporal Properties              ##
 ##                                                                                                   ##
 #######################################################################################################
-ts_metadata <- readRDS(here("data", "processed", "metadata_and_time_series_features.rds"))
-envt_variables <- read.csv(here("data", "processed", "location_ecological_data.csv")) %>%
+ts_metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
+envt_variables <- read.csv(here("data", "environmental_covariates", "location_ecological_data.csv")) %>%
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
   group_by(id, country, admin1, admin2) %>%
-  summarise(across(population_per_1km:worldclim_9, ~ mean(.x, na.rm = TRUE)))
+  summarise(across(population_per_1km:mean_temperature_driest_quarter, ~ mean(.x, na.rm = TRUE)))
 overall <- ts_metadata %>%
-  left_join(envt_variables, by = c("id", "country", "admin1", "admin2")) 
+  left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -38,12 +38,18 @@ overall <- ts_metadata %>%
 ##             I.e. Test/Train Split, CV Folds, Random Forest Engine, Performance Metrics            ##
 ##                                                                                                   ##
 #######################################################################################################
-# Subsetting Outcome and Variables for Analysis
-data <- overall %>% 
-  dplyr::select(peaks, country, population_per_1km:worldclim_9, -LC_190) %>%
-  mutate(country = as.factor(country))
+# Subsetting Outcome and Variables for Analysis + Log_10'ing Population (Easier for Visualisation Later On)
+set.seed(234)
+data <- overall %>% # need to figure out whether to do rf_train or data here 
+  dplyr::select(peaks, country, population_per_1km:mean_temperature_driest_quarter, -LC_190, -LC_210, -mean_temperature_driest_quarter) %>% # LC190 is urban so correlated v strong with PopPer1km
+  mutate(country = case_when((country == "Afghanistan" | country == "Djibouti" | 
+                                country == "Myanmar" | country == "Pakistan") ~ "aOther",
+                             TRUE ~ country)) %>%
+  mutate(country = as.factor(country)) %>%
+  mutate(country_peaks = paste0(peaks, "_", country))
 data$peaks <- ifelse(data$peaks == 1, "one", "two")
 data$peaks <- as.factor(data$peaks)
+data$population_per_1km <- log(data$population_per_1km)
 
 # Storage Tibble for Results
 iterations <- tibble(iteration = 1, 
