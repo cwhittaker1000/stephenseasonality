@@ -48,7 +48,6 @@ data$peaks <- as.factor(data$peaks)
 # Storage Tibble for Results
 iterations <- tibble(iteration = 1, 
                      training_data = list(1),
-                     test_data = list(1),
                      juiced = list(1),
                      best_mtry = 1,  
                      best_min_n = 1,
@@ -99,7 +98,7 @@ for (i in 1:length(seeds)) {
     add_recipe(envt_recipe) %>%
     add_model(random_forest)
   rf_grid <- grid_regular(mtry(range = c(2, dim(juiced)[2]-3)), 
-                          min_n(range = c(2, dim(juiced)[1] - 10)), levels = 25)
+                          min_n(range = c(2, dim(juiced)[1] - 10)), levels = 15)
   
   # Running the Model in Parallel 
   all_cores <- parallel::detectCores(logical = FALSE)
@@ -154,7 +153,6 @@ for (i in 1:length(seeds)) {
   # Assigning Outputs to Tibble
   iterations[i, "iteration"] <- i
   iterations[i, "training_data"] <- list(list(rf_train))
-  iterations[i, "test_data"] <- list(list(rf_test))
   iterations[i, "juiced"] <- list(list(juiced))
   iterations[i, "best_mtry"] <- best$mtry
   iterations[i, "best_min_n"] <- best$min_n
@@ -162,7 +160,7 @@ for (i in 1:length(seeds)) {
   iterations[i, "cv_accuracy"] <- cv_accuracy
   iterations[i, "cv_one_peak_accuracy"] <- cv_one_peak_accuracy
   iterations[i, "cv_two_peak_accuracy"] <- cv_two_peak_accuracy
-  iterations[i, "full_roc_auc"] <- final_res_auc
+  iterations[i, "full_roc_auc"] <- final_res_auc$.estimate
   iterations[i, "full_accuracy"] <- overall_accuracy
   iterations[i, "full_one_peak_accuracy"] <- one_peak_accuracy
   iterations[i, "full_two_peak_accuracy"] <- two_peak_accuracy
@@ -178,4 +176,5 @@ x <- bind_rows(iterations$importance) %>%
   summarise(mean = mean(Importance),
             sd = sd(Importance),
             se = sd(Importance)/sqrt(n()))
-x[rev(order(x$mean)), ]
+ggplot(data = x[rev(order(x$mean)), ], aes(x = Variable, y = mean)) + 
+  geom_bar(stat = "identity")
