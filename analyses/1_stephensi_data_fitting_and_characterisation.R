@@ -192,16 +192,17 @@ saveRDS(features_df, file = here("data", "systematic_review_results", "metadata_
 
 # Normalising features
 normalised_features <- scale(features)
+normalised_features <- normalised_features[, -1]
 normalised_output <- t(apply(mean_realisation, 1, normalise_total))
 
 # Running PCA on normalised features
 PCA <- prcomp(normalised_features)
 summary <- summary(PCA)
-loadings <- PCA$rotation[, 1:8]
+loadings <- PCA$rotation[, 1:7]
 PCA_output <- as.matrix(normalised_features) %*% loadings
 
 # Clustering the data 
-num_clust <- 3
+num_clust <- 4
 clustering_results <- kmeans(PCA_output[, 1:4], num_clust, nstart = 20)
 
 cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, 
@@ -264,35 +265,6 @@ for (i in 1:num_clust) {
   }
 }
 
-# Exploring entropy in further detail - consider removing/check with Sam I'm doing it correct
-par(mfrow = c(2, 4))
-for (i in which(cluster_membership == 3)) {
-  index <- metadata$id[i]
-  mean_realisation_extract(index, new_df, prior, TRUE)
-  browser()
-}
-features[which(cluster_membership == 3), ]
-
-interval <-  findInterval(features[, "entropy"], quantile(features[, "entropy"], probs=0:5/5))
-colours <- palette()[1:length(unique(interval))]
-timepoints <- seq(0, 12, length = dim(normalised_output)[2])
-cluster_membership <- interval
-table(cluster_membership)
-par(mfrow = c(2, 3))
-for (i in 1:(length(unique(interval)) - 1)) {
-  cluster <- normalised_output[cluster_membership == i, ]
-  max <- max(cluster)
-  plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", ylim = c(0, 10), lwd = 2, col = colours[i], 
-       las = 1, xaxt = "n", xlab = "", ylab = "")
-  for (j in 1:length(cluster[, 1])) {
-    lines(timepoints, cluster[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
-  }
-  number_time_series <- length(cluster[, 1])
-  entropy <- mean(features[cluster_membership == i, "entropy"])
-  text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
-  text(6.5, 9.5, paste0("Entropy = ", round(entropy, 0)), cex = 1.5, col = "grey20")
-}
-
 # Visualising the time-series belonging to urban/rural
 urban_rural <- overall$city
 tab <- table(clustering_results$cluster, urban_rural)
@@ -315,3 +287,48 @@ for (i in 1:2) {
   number_time_series <- length(set[, 1])
   text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
 }
+
+mean(features$per_ind_4_months[urban_rural == "Urban"]) # almost all urban time series are unimodal
+mean(features$per_ind_4_months[urban_rural == "Rural"]) # mixture of unimodal and bimodal time series for rural
+
+mean(features$peaks[urban_rural == "Urban"]) # almost all urban time series are unimodal
+mean(features$peaks[urban_rural == "Rural"]) # mixture of unimodal and bimodal time series for rural
+
+mean(features$per_ind_4_months[clustering_results$cluster == 1])
+mean(features$per_ind_4_months[clustering_results$cluster == 2])
+mean(features$per_ind_4_months[clustering_results$cluster == 3])
+mean(features$per_ind_4_months[clustering_results$cluster == 4])
+
+mean(features$jan_dist[clustering_results$cluster == 1])
+mean(features$jan_dist[clustering_results$cluster == 2])
+mean(features$jan_dist[clustering_results$cluster == 3])
+mean(features$jan_dist[clustering_results$cluster == 4])
+
+# Exploring entropy in further detail - consider removing/check with Sam I'm doing it correct
+# par(mfrow = c(2, 4))
+# for (i in which(cluster_membership == 3)) {
+#   index <- metadata$id[i]
+#   mean_realisation_extract(index, new_df, prior, TRUE)
+#   browser()
+# }
+# features[which(cluster_membership == 3), ]
+# 
+# interval <-  findInterval(features[, "entropy"], quantile(features[, "entropy"], probs=0:5/5))
+# colours <- palette()[1:length(unique(interval))]
+# timepoints <- seq(0, 12, length = dim(normalised_output)[2])
+# cluster_membership <- interval
+# table(cluster_membership)
+# par(mfrow = c(2, 3))
+# for (i in 1:(length(unique(interval)) - 1)) {
+#   cluster <- normalised_output[cluster_membership == i, ]
+#   max <- max(cluster)
+#   plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", ylim = c(0, 10), lwd = 2, col = colours[i], 
+#        las = 1, xaxt = "n", xlab = "", ylab = "")
+#   for (j in 1:length(cluster[, 1])) {
+#     lines(timepoints, cluster[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
+#   }
+#   number_time_series <- length(cluster[, 1])
+#   entropy <- mean(features[cluster_membership == i, "entropy"])
+#   text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
+#   text(6.5, 9.5, paste0("Entropy = ", round(entropy, 0)), cex = 1.5, col = "grey20")
+# }

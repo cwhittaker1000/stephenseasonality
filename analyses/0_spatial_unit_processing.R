@@ -7,13 +7,17 @@ library(dplyr); library(raster); library(rgdal); library(sf); library(raster); l
 library(tidyverse); library(here)
 
 # Loading in admin 0 units, simplifying and saving
-admin0 <- readRDS(here("data", "raw_gadm_shapefiles", "level0.rds"))
+admin0 <- readRDS(here("data", "admin_units", "raw_gadm_shapefiles", "level0.rds"))
 admin0 <- admin0[!is.na(admin0$NAME_0), ]
 countries <- c("Afghanistan", "Armenia", "Azerbaijan", "Bangladesh", "Bhutan", "Cambodia", "China", "Djibouti", "Egypt", 
                "Ethiopia", "India", "Israel", "Iraq", "Iran", "Jordan", "Kenya", "Kyrgyzstan",
                "Laos", "Lebanon", "Myanmar", "Nepal", "Oman", "Pakistan", "Saudi Arabia", 
                "Somalia", "South Sudan", "Sudan", "Syria", "Tajikistan", "Thailand", "Turkey", "Turkmenistan", "Uzbekistan",
-               "Vietnam", "Yemen")
+               "Vietnam", "Yemen",
+               "Mongolia", "Georgia", "Kazakhstan", "Turkey", "Ukraine", "Romania", "Bulgaria", "Libya",
+               "Democratic Republic of the Congo", "Central African Republic", "Rwanda", "Burundi", "Tanzania",
+               "Uganda", "Chad", "Malaysia", "Singapore", "Indonesia", "Uzbekistan", "Russia")
+
 admin0 <- admin0[admin0$NAME_0 %in% countries, ]
 saveRDS(admin0, here("data", "admin_units", "complex_admin0.rds"))
 for (i in 1:nrow(admin0)) {

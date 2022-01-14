@@ -9,9 +9,11 @@ entropic_measure <- function(fitting_output) {
 }
 
 # Calculates percentage of incidence in peak X months
-percent_incidence <- function(fitting_output, number_of_months) {
+percent_incidence <- function(fitting_output, number_of_months, timepoints_per_month = NA) {
   
-  timepoints_per_month <- (length(fitting_output) - 1)/12
+  if(is.na(timepoints_per_month)) {
+    timepoints_per_month <- (length(fitting_output) - 1)/12
+  }
   number_timepoints <- timepoints_per_month * number_of_months
   if ((timepoints_per_month %% 1) != 0) {
     stop("number of timepoints per month isn't a whole number")
