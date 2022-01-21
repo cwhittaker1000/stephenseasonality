@@ -9,7 +9,7 @@ library(deSolve); library(parallel); library(matlib); library(matlab); library(p
 library(rstan); library(ggplot2); library(invgamma); library(tictoc); library(DescTools);
 library(dismo); library(gbm); library(mltools); library(glmnet); library(caret); library(themis)
 library(tidymodels); library(doParallel); library(vip); library(forcats); library(vip);
-library(RColorBrewer); library(corrplot); library(DALEXtra)
+library(RColorBrewer); library(corrplot); library(DALEXtra); library(cowplot)
 
 # Load functions
 source(here("functions", "time_series_characterisation_functions.R"))
@@ -21,6 +21,13 @@ urban_rural <- overall$city
 
 features_df <- readRDS(file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
 features <- features_df[, 7:dim(features_df)[2]]
+envt_variables <- read.csv(here("data", "environmental_covariates", "location_ecological_data.csv")) %>%
+  rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
+  group_by(id, country, admin1, admin2) %>%
+  summarise(across(population_per_1km:mean_temperature_driest_quarter, ~ mean(.x, na.rm = TRUE)))
+envt_variables <- features_df %>%
+  left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
+
 
 cluster_output <- readRDS(file = here("data", "systematic_review_results", "cluster_membership.rds"))
 cluster_membership <- cluster_output$cluster
@@ -29,6 +36,98 @@ rf_ups_full <- readRDS(file = here("outputs", "random_forest_outputs", "repeated
 rf_no_ups_full <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData.rds"))
 rf_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_SubsetData.rds"))
 rf_no_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_NoUpsampling_SubsetData.rds"))
+
+# Plotting AUC Results
+for (i in 1:length(rf_no_ups_full$test_roc_curve)) {
+  temp <- rf_no_ups_full$test_roc_curve[[i]]
+  temp_ups <- rf_ups_full$test_roc_curve[[i]]
+  if (i == 1) {
+    df <- temp
+    df$iteration <- 1
+    df_ups <- temp_ups
+    df_ups$iteration <- 1
+  } else {
+    temp$iteration <- i
+    df <- rbind(df, temp)
+    temp_ups$iteration <- i
+    df_ups <- rbind(df_ups, temp_ups)
+  }
+  print(i)
+}
+
+a_plot <- ggplot(df, aes(x = 1-specificity, y = sensitivity, col = factor(iteration))) +
+  geom_path() +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
+  xlab("1 - Specificity") +
+  ylab("Sensitivity") +
+  theme(legend.position = "none") +
+  annotate("label", x = 0.20, y = 0.97,
+           label = paste0("Mean AUC = ", round(mean(rf_no_ups_full$test_roc_auc), 2)),
+           label.padding = unit(0.35, "lines"), label.r = unit(0, "lines"),
+           label.size = unit(0.35, "lines"), size = 5)
+b <- bind_rows(rf_no_ups_full$importance)
+b$data <- "full_data"
+imp <- b %>%
+  group_by(Variable) %>%
+  summarise(mean_Importance = mean(Importance),
+            stdev_Importance = sd(Importance),
+            stder_Importance = sd(Importance)/sqrt(n()))
+imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
+var_names <- imp$Variable[order(imp$mean_Importance)]
+new_names <- c("Study\nfrom\nIndia", "LC 180", "LC 150", "LC 11", 
+               "Study\nfrom\nIran", "Temperature\nSeasonality", "LC 130", "LC 110",
+               "LC 122", "LC 120", "Rainfall\nColdest\nQuarter", "Rainfall\nSeasonality",
+               "LC 20", "LC 30", "Population\nPer\nSquare Km", "LC 10")
+b_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
+                fill = mean_Importance)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
+                    ymax = mean_Importance + 1.96 * stdev_Importance)) +
+  scale_x_discrete(labels = new_names) +
+  xlab("") + ylab("Variable Importance") +
+  lims(y = c(0, 0.036)) +
+  theme(legend.position = "none")
+
+cowplot::plot_grid(a_plot, b_plot, rel_widths = c(1, 2), align = "h", axis = "b")
+
+a_plot_ups <- ggplot(df_ups, aes(x = 1-specificity, y = sensitivity, col = factor(iteration))) +
+  geom_path() +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
+  xlab("1 - Specificity") +
+  ylab("Sensitivity") +
+  theme(legend.position = "none") +
+  annotate("label", x = 0.20, y = 0.97,
+           label = paste0("Mean AUC = ", round(mean(rf_ups_full$test_roc_auc), 2)),
+           label.padding = unit(0.35, "lines"), label.r = unit(0, "lines"),
+           label.size = unit(0.35, "lines"), size = 5)
+b_ups <- bind_rows(rf_ups_full$importance)
+b_ups$data <- "full_data"
+imp_ups <- b_ups %>%
+  group_by(Variable) %>%
+  summarise(mean_Importance = mean(Importance),
+            stdev_Importance = sd(Importance),
+            stder_Importance = sd(Importance)/sqrt(n()))
+imp_ups$lower <- pmax(rep(0, length(imp_ups$mean_Importance)), imp_ups$mean_Importance - 1.96 * imp_ups$stdev_Importance)
+var_names_ups <- imp_ups$Variable[order(imp_ups$mean_Importance)]
+new_names_ups <- c("Study\nfrom\nIndia", "LC 180", "LC 150", "LC 130", "LC 11", "Rainfall\nColdest\nQuarter", 
+                   "LC 120", "LC 20", "LC 122", "LC 10", "Rainfall\nSeasonality", "LC 110",
+                   "Temperature\nSeasonality", "LC 30", "Study\nfrom\nIran", "Population\nPer\nSquare Km")
+b_plot_ups <- ggplot(imp_ups, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
+                     fill = mean_Importance)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
+                    ymax = mean_Importance + 1.96 * stdev_Importance)) +
+  scale_x_discrete(labels = new_names_ups) +
+  xlab("") + ylab("Variable Importance") +
+  lims(y = c(0, 0.064)) +
+  theme(legend.position = "none")
+
+
+cowplot::plot_grid(a_plot, b_plot, 
+                   a_plot_ups, b_plot_ups, nrow = 2, ncol =2,
+                   rel_widths = c(1, 2), align = "h", axis = "b")
+
+
 
 # Plotting Random Forest Results
 a <- bind_rows(rf_ups_full$importance)
@@ -39,6 +138,16 @@ c <- bind_rows(rf_ups_subset$importance)
 c$data <- "subset_data"
 d <- bind_rows(rf_no_ups_subset$importance)
 d$data <- "subset_data"
+
+
+mean(envt_variables$population_per_1km[urban_rural == "Urban"])
+mean(envt_variables$population_per_1km[urban_rural == "Rural"])
+
+mean(envt_variables$LC_10[urban_rural == "Urban"])
+mean(envt_variables$LC_10[urban_rural == "Rural"])
+
+mean(envt_variables$LC_210[urban_rural == "Urban"])
+mean(envt_variables$LC_210[urban_rural == "Rural"])
 
 
 
