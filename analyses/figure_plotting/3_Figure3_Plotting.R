@@ -127,81 +127,6 @@ cowplot::plot_grid(a_plot, b_plot,
                    a_plot_ups, b_plot_ups, nrow = 2, ncol =2,
                    rel_widths = c(1, 2), align = "h", axis = "b")
 
-
-
-# Plotting Random Forest Results
-a <- bind_rows(rf_ups_full$importance)
-a$data <- "full_data"
-b <- bind_rows(rf_no_ups_full$importance)
-b$data <- "full_data"
-c <- bind_rows(rf_ups_subset$importance)
-c$data <- "subset_data"
-d <- bind_rows(rf_no_ups_subset$importance)
-d$data <- "subset_data"
-
-
-mean(envt_variables$population_per_1km[urban_rural == "Urban"])
-mean(envt_variables$population_per_1km[urban_rural == "Rural"])
-
-mean(envt_variables$LC_10[urban_rural == "Urban"])
-mean(envt_variables$LC_10[urban_rural == "Rural"])
-
-mean(envt_variables$LC_210[urban_rural == "Urban"])
-mean(envt_variables$LC_210[urban_rural == "Rural"])
-
-
-
-%>%
-  group_by(Variable) %>%
-  summarise(mean = mean(Importance),
-            sd = sd(Importance),
-            se = sd(Importance)/sqrt(n()))
-x[rev(order(x$mean)), ]
-
-x <- bind_rows(iterations_ups$importance) %>%
-  group_by(Variable) %>%
-  summarise(mean = mean(Importance),
-            sd = sd(Importance),
-            se = sd(Importance)/sqrt(n()))
-x[rev(order(x$mean)), ]
-
-
-mean(rf_ups_full$test_roc_auc)
-mean(rf_no_ups_full$test_roc_auc)
-mean(rf_ups_subset$test_roc_auc)
-mean(rf_no_ups_subset$test_roc_auc)
-
-
-
-x <- bind_rows(iterations_ups$importance, iterations$importance) %>%
-  pivot_wider(names_from = sampling, values_from = Importance) %>%
-  group_by(Variable) %>%
-  summarise(mean_ups = mean(upsampling), 
-            mean_no = mean(no_upsampling))
-
-
-x <- bind_rows(iterations_ups$importance, iterations$importance) 
-ggplot(x, aes(x= Variable, fill = sampling, y = Importance)) +
-  geom_boxplot()
-
-
-
-mean(rf_ups_full$test_accuracy)
-mean(rf_no_ups_full$test_accuracy)
-mean(rf_ups_subset$test_accuracy)
-mean(rf_no_ups_subset$test_accuracy)
-
-mean(rf_ups_full$test_one_peak_accuracy)
-mean(rf_no_ups_full$test_one_peak_accuracy)
-mean(rf_ups_subset$test_one_peak_accuracy)
-mean(rf_no_ups_subset$test_one_peak_accuracy)
-
-mean(rf_ups_full$test_two_peak_accuracy)
-mean(rf_no_ups_full$test_two_peak_accuracy)
-mean(rf_ups_subset$test_two_peak_accuracy)
-mean(rf_no_ups_subset$test_two_peak_accuracy)
-
-
 # Extracting Mean Realisation for Each Time-Series
 set.seed(10)
 interpolating_points <- 2
@@ -281,6 +206,24 @@ mean(features$per_ind_4_months[urban_rural == "Rural" & features[, "peaks"] == 2
 
 # Need to explore the rural 1 vs 2 peaks in more depth - what's up with that and why are we seeing such
 # divergent dynamics across those 2 groups.
+
+test <- normalised_output[urban_rural == "Rural" & features[, "peaks"] == 2, ]
+# test_rain <- norm_rainfall_storage[urban_rural == "Rural" & features[, "peaks"] == 2, ]
+start_index <- apply(test, 1, function(x) which(x == max(x)))
+test_mat <- matrix(nrow = dim(test)[1], ncol = dim(test)[2])
+# test_mat_rain <- matrix(nrow = dim(test_rain)[1], ncol = dim(test_rain)[2])
+end <- dim(test)[2]
+end_rain <- dim(test_rain)[2]
+for (i in 1:dim(test)[1]) {
+  test_mat[i, ] <- test[i, c(start_index[i]:end, 1:(start_index[i]-1))]
+  # test_mat_rain[i, ] <- test_rain[i, c(start_index[i]:end_rain, 1:(start_index[i]-1))]
+}
+plot(test_mat[1, ], type = "l", ylim = c(0, 0.15), col = adjustcolor("black", alpha.f = 0.1))
+for (i in 1:dim(test)[1]) {
+  lines(test_mat[i, ], type = "l", col = adjustcolor("black", alpha.f = 0.1))
+}
+lines(apply(test_mat, 2, mean))
+# lines(apply(test_mat_rain, 2, mean), col = "red")
 
 palette(c("#70AA4D", "#6F8D98"))
 par(mfrow = c(2, 2), mar = c(0.5, 0.5, 0.5, 0.5), oma = c(3, 1, 1, 5))
@@ -446,4 +389,16 @@ mean(per_rain_4_months[urban_rural == "Urban" & features[, "peaks"] == 2])
 plot(norm_rainfall_storage[1, ])
 percent_incidence(fitting_output = norm_rainfall_storage[1, ], number_of_months = 4, timepoints_per_month = 2)
 
+
+
+
+
+mean(log(envt_variables$population_per_1km[urban_rural == "Urban"]))
+mean(log(envt_variables$population_per_1km[urban_rural == "Rural"]))
+
+mean(envt_variables$LC_10[urban_rural == "Urban"])
+mean(envt_variables$LC_10[urban_rural == "Rural"])
+
+mean(envt_variables$LC_30[urban_rural == "Urban"])
+mean(envt_variables$LC_30[urban_rural == "Rural"])
 
