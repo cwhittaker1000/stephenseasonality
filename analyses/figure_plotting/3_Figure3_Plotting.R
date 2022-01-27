@@ -207,7 +207,7 @@ mean(features$per_ind_4_months[urban_rural == "Rural" & features[, "peaks"] == 2
 # Need to explore the rural 1 vs 2 peaks in more depth - what's up with that and why are we seeing such
 # divergent dynamics across those 2 groups.
 
-test <- normalised_output[urban_rural == "Rural" & features[, "peaks"] == 2, ]
+test <- normalised_output[urban_rural == "Urban" & features[, "peaks"] == 1, ]
 # test_rain <- norm_rainfall_storage[urban_rural == "Rural" & features[, "peaks"] == 2, ]
 start_index <- apply(test, 1, function(x) which(x == max(x)))
 test_mat <- matrix(nrow = dim(test)[1], ncol = dim(test)[2])
@@ -218,9 +218,9 @@ for (i in 1:dim(test)[1]) {
   test_mat[i, ] <- test[i, c(start_index[i]:end, 1:(start_index[i]-1))]
   # test_mat_rain[i, ] <- test_rain[i, c(start_index[i]:end_rain, 1:(start_index[i]-1))]
 }
-plot(test_mat[1, ], type = "l", ylim = c(0, 0.15), col = adjustcolor("black", alpha.f = 0.1))
+plot(test_mat[1, ], type = "l", ylim = c(0, 0.15), col = adjustcolor("black", alpha.f = 0.2))
 for (i in 1:dim(test)[1]) {
-  lines(test_mat[i, ], type = "l", col = adjustcolor("black", alpha.f = 0.1))
+  lines(test_mat[i, ], type = "l", col = adjustcolor("black", alpha.f = 0.2))
 }
 lines(apply(test_mat, 2, mean))
 # lines(apply(test_mat_rain, 2, mean), col = "red")
