@@ -42,37 +42,41 @@ for (i in 1:length(scalar_values)) {
 }
 loc_seasonality_list[i + 1] <- NA 
 
-multi_outputs <- sapply(1:(length(scalar_values) + 1), function(x){
+fresh_run <- FALSE
+if (fresh_run) {
+  multi_outputs <- sapply(1:(length(scalar_values) + 1), function(x){
+    
+    set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality.R", # model file
+                                            #Model parameters to work out transmission
+                                            init_EIR = 0.000001, # initial EIR from which the endemic equilibria solution is created
+                                            #These are the mosquito parameters (bionomics)
+                                            Q0 = stephensi_data$Q0, 
+                                            chi = stephensi_data$chi, 
+                                            bites_Bed = stephensi_data$bites_Bed,
+                                            bites_Indoors = stephensi_data$bites_Indoors, 
+                                            #These are our seasonal variations
+                                            scalar = 1, #This is the scalar shown above in the plots - DOESN'T SEEM TO DO ANYTHING - ASK ARRAN!!!
+                                            #custom_seasonality = if(x == 1) loc_seasonality else NA,
+                                            custom_seasonality = loc_seasonality_list[[x]], # NA for perennial
+                                            #This sets up how long we want to run for and the density vec
+                                            time_length = length(density_vec),
+                                            density_vec = density_vec)
+    
+    #Process model formulation
+    set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
+    mod_run <- set_up_model$run(t = 1:length(density_vec))
+    out <- set_up_model$transform_variables(mod_run)
+    model_ran <- as.data.frame(out)
+    model_ran <- data.frame(id = x, model_ran)
+    
+  }, simplify = FALSE)
   
-  set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality.R", # model file
-                                          #Model parameters to work out transmission
-                                          init_EIR = 0.000001, # initial EIR from which the endemic equilibria solution is created
-                                          #These are the mosquito parameters (bionomics)
-                                          Q0 = stephensi_data$Q0, 
-                                          chi = stephensi_data$chi, 
-                                          bites_Bed = stephensi_data$bites_Bed,
-                                          bites_Indoors = stephensi_data$bites_Indoors, 
-                                          #These are our seasonal variations
-                                          scalar = 1, #This is the scalar shown above in the plots - DOESN'T SEEM TO DO ANYTHING - ASK ARRAN!!!
-                                          #custom_seasonality = if(x == 1) loc_seasonality else NA,
-                                          custom_seasonality = loc_seasonality_list[[x]], # NA for perennial
-                                          #This sets up how long we want to run for and the density vec
-                                          time_length = length(density_vec),
-                                          density_vec = density_vec)
-  
-  #Process model formulation
-  set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
-  mod_run <- set_up_model$run(t = 1:length(density_vec))
-  out <- set_up_model$transform_variables(mod_run)
-  model_ran <- as.data.frame(out)
-  model_ran <- data.frame(id = x, model_ran)
-  
-}, simplify = FALSE)
-
-saveRDS(multi_outputs, file = "outputs/malaria_model_running.rds")
+  saveRDS(multi_outputs, file = "outputs/malaria_model_running.rds")
+} else {
+  multi_outputs <- readRDS("outputs/malaria_model_running.rds")
+}
 
 # Loading In Saved Runs and Combining Into Overall Data Frame
-multi_outputs <- readRDS("outputs/malaria_model_running.rds")
 for (i in 1:(length(scalar_values) + 1)) {
   if (i == 1) {
     temp <- multi_outputs[[i]][, c("id", "t", "prev", "Incidence", "mv")]
@@ -101,9 +105,9 @@ time_to_2_percent <- c()
 time_to_2_percent_yearly_average <- c()
 seasonality <- c()
 for (i in 1:(length(scalar_values) + 1)) {
-  temp <- multi_outputs[[i]]$prev
-  above_2_percent <- which(temp > 0.02)[1]/365
-  yearly_averages <- colMeans(matrix(temp, nrow = 365))
+  temp_calc <- multi_outputs[[i]]$prev
+  above_2_percent <- which(temp_calc > 0.02)[1]/365
+  yearly_averages <- colMeans(matrix(temp_calc, nrow = 365))
   yearly_average_above_2_percent <- which(yearly_averages > 0.02)[1]
   
   time_to_2_percent <- c(time_to_2_percent, above_2_percent)
