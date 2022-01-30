@@ -4,89 +4,20 @@ library(lubridate); library(rgdal); library(rgeos); library(raster); library(vir
 library(ggpolypath); library(maptools); library(tidyverse); library(plyr); library(e1071)
 library(odin); library(ggpubr); library(viridis); library(Hmisc); library(cowplot)
 library(ipred); library(ICDMM); #devtools::install_github("https://github.com/jhellewell14/ICDMM", dependencies = TRUE)
-library(scales); library(patchwork)
+library(scales); library(patchwork); library(here); library(zoo)
 
 # Loading functions and mosquito bionomics data
 options(scipen = 999)
 invisible(sapply(list.files("functions/malaria_model_running/", full.names = TRUE, recursive = TRUE), function(x) source(x)))
+source(here("functions", "time_series_characterisation_functions.R"))
+overall <- readRDS(file = here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
 bionomics_data <- read.csv("data/bionomic_species_all_LHC_100.csv", stringsAsFactors = FALSE)
 stephensi_data <- round(as.data.frame(rbind(colMeans(subset(bionomics_data, species == "stephensi")[, c("Q0", "chi", "bites_Bed", "bites_Indoors")]))), 2)
+features_df <- readRDS(file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
+cluster_output <- readRDS(file = here("data", "systematic_review_results", "cluster_membership.rds"))
+cluster_membership <- cluster_output$cluster
 
-# Generating the vector of how mosquito density changes over time 
-density_start <- 0.1
-density_end <- 10
-values <- sigmoid(seq(-10, 10, length.out = 365 * 4)) # How long you want introduction to last - here, 10 years
-density_vec <- c(rep(density_start, 365 * 1), 
-                 pmin((values * (density_end - density_start)) + density_start, density_end),
-                 rep(density_end, 365 * 23))
-dens_vec_df <- data.frame(vector_density = density_vec, time = seq(1:length(density_vec))/365)
-
-#Pre-loaded seasonal profiles
-admin_units_seasonal <- readRDS("data/admin_units_seasonal.rds")
-admin_matches <- admin_match(admin_unit = "Fatick", country = "Senegal", admin_units_seasonal = admin_units_seasonal)
-loc_seasonality <- seasonal_profile(admin_units_seasonal[admin_matches, ], scalar = 1)
-scalar_values <- seq(1, 0.05, -0.05)
-seasonality_list <- vector(mode = "list", length = length(scalar_values))
-for (i in 1:length(scalar_values)) {
-  temp <- seasonal_profile(admin_units_seasonal[admin_matches, ], scalar = scalar_values[i])
-  temp_df <- data.frame(scalar = scalar_values[i], density = temp, time = 1:length(temp))
-  seasonality_list[[i]] <- temp_df
-}
-seasonal_profiles <- bind_rows(seasonality_list)
-seasonal_profiles <- rbind(seasonal_profiles, data.frame(scalar = 0, density = 1, time = 1:length(temp)))
-
-# Running the deterministic malaria model with increasing vector density over time and with/without seasonality
-loc_seasonality_list <- vector(mode = "list", length = length(scalar_values) + 1)
-for (i in 1:length(scalar_values)) {
-  loc_seasonality_list[[i]] <- seasonal_profile(admin_units_seasonal[admin_matches, ], scalar = scalar_values[i])
-}
-loc_seasonality_list[i + 1] <- NA 
-
-fresh_run <- FALSE
-if (fresh_run) {
-  multi_outputs <- sapply(1:(length(scalar_values) + 1), function(x){
-    
-    set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality.R", # model file
-                                            #Model parameters to work out transmission
-                                            init_EIR = 0.000001, # initial EIR from which the endemic equilibria solution is created
-                                            #These are the mosquito parameters (bionomics)
-                                            Q0 = stephensi_data$Q0, 
-                                            chi = stephensi_data$chi, 
-                                            bites_Bed = stephensi_data$bites_Bed,
-                                            bites_Indoors = stephensi_data$bites_Indoors, 
-                                            #These are our seasonal variations
-                                            scalar = 1, #This is the scalar shown above in the plots - DOESN'T SEEM TO DO ANYTHING - ASK ARRAN!!!
-                                            #custom_seasonality = if(x == 1) loc_seasonality else NA,
-                                            custom_seasonality = loc_seasonality_list[[x]], # NA for perennial
-                                            #This sets up how long we want to run for and the density vec
-                                            time_length = length(density_vec),
-                                            density_vec = density_vec)
-    
-    #Process model formulation
-    set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
-    mod_run <- set_up_model$run(t = 1:length(density_vec))
-    out <- set_up_model$transform_variables(mod_run)
-    model_ran <- as.data.frame(out)
-    model_ran <- data.frame(id = x, model_ran)
-    
-  }, simplify = FALSE)
-  
-  saveRDS(multi_outputs, file = "outputs/malaria_model_running.rds")
-} else {
-  multi_outputs <- readRDS("outputs/malaria_model_running.rds")
-}
-
-# Loading In Saved Runs and Combining Into Overall Data Frame
-for (i in 1:(length(scalar_values) + 1)) {
-  if (i == 1) {
-    temp <- multi_outputs[[i]][, c("id", "t", "prev", "Incidence", "mv")]
-  } else {
-    temp <- rbind(temp, multi_outputs[[i]][, c("id", "t", "prev", "Incidence", "mv")])
-  }
-}
-temp$id <- as.factor(temp$id)
-
-# Calculating Aggregate Quantities E.g. Degree of Seasonality, Time to 2% Etc
+# Functions
 calc_incidence_seasonality <- function(input, num_months) {
   days_in_year <- length(input)
   period <- round(days_in_year * num_months/12)
@@ -101,11 +32,122 @@ calc_incidence_seasonality <- function(input, num_months) {
   return(max(incidence_vector))
 }
 
+summary_function <- function(x) {
+  temp <- x %>%
+    dplyr::group_by(t) %>%
+    dplyr::summarise(prev_mean = mean(prev),
+                     prev_lower = quantile(prev, 0.10),
+                     prev_upper = quantile(prev, 0.90),
+                     inc_mean = mean(Incidence),
+                     inc_lower = quantile(Incidence, 0.10),
+                     inc_upper = quantile(Incidence, 0.90))
+  temp$prev_lower[temp$prev_lower < 0] <- 0
+  temp$inc_lower[temp$inc_lower < 0] <- 0
+  return(temp)
+}
+
+# Extracting Mean Realisation for Each Time-Series
+set.seed(10)
+urban_rural <- overall$city
+interpolating_points <- 2
+mean_realisation <- matrix(nrow = dim(overall)[1], ncol = (12 * interpolating_points + 1))
+prior <- "informative"
+for (i in 1:length(overall$id)) {
+  # Indexing 
+  index <- overall$id[i]
+  
+  # Loading in and processing the fitted time-series
+  if (prior == "informative") {
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", index, ".rds"))
+  } else if (prior == "uninformative") {
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/uninformative/"), "/uninf_periodic_fit_", index, ".rds"))
+  }  
+  
+  # Extracting the mean fitted time-series
+  timepoints <- STAN_output$timepoints
+  all_timepoints <- STAN_output$all_timepoints
+  ordered_timepoints <- all_timepoints[order(all_timepoints)]
+  MCMC_output <- STAN_output$chain_output
+  f <- MCMC_output[, grepl("f", colnames(MCMC_output))]
+  f_mean <- apply(f, 2, mean)
+  negbinom_intensity_mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
+  mean_realisation[i, ] <- negbinom_intensity_mean
+}
+normalised_output <- t(apply(mean_realisation, 1, normalise_total))
+
+# Generating the vector of how mosquito density changes over time 
+density_start <- 0.1
+density_end <- 10
+values <- sigmoid(seq(-10, 10, length.out = 365 * 4)) # How long you want introduction to last - here, 10 years
+density_vec <- c(rep(density_start, 365 * 1), 
+                 pmin((values * (density_end - density_start)) + density_start, density_end),
+                 rep(density_end, 365 * 23))
+dens_vec_df <- data.frame(vector_density = density_vec, time = seq(1:length(density_vec))/365)
+
+# Generating seasonal profiles based on actual stephensi data
+scaled_year_output <- t(apply(normalised_output, 1, function(x) {
+  temp <- approx(x, n = 365)$y
+  temp <- 365 * temp/sum(temp)
+  temp[temp < 0.1] <- 0.1
+  temp }))
+
+# Running the deterministic malaria model with increasing vector density over time and with/without seasonality
+steph_seasonality_list <- vector(mode = "list", length = dim(scaled_year_output)[1])
+for (i in 1:(dim(scaled_year_output)[1])) {
+  steph_seasonality_list[[i]] <- scaled_year_output[i, ]
+}
+
+fresh_run <- FALSE
+if (fresh_run) {
+  multi_outputs <- sapply(1:(length(steph_seasonality_list)), function(x){
+    
+    set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality.R", # model file
+                                            #Model parameters to work out transmission
+                                            init_EIR = 0.000001, # initial EIR from which the endemic equilibria solution is created
+                                            #These are the mosquito parameters (bionomics)
+                                            Q0 = stephensi_data$Q0, 
+                                            chi = stephensi_data$chi, 
+                                            bites_Bed = stephensi_data$bites_Bed,
+                                            bites_Indoors = stephensi_data$bites_Indoors, 
+                                            #These are our seasonal variations
+                                            scalar = 1, #This is the scalar shown above in the plots - DOESN'T SEEM TO DO ANYTHING - ASK ARRAN!!!
+                                            #custom_seasonality = if(x == 1) loc_seasonality else NA,
+                                            custom_seasonality = steph_seasonality_list[[x]], # NA for perennial
+                                            #This sets up how long we want to run for and the density vec
+                                            time_length = length(density_vec),
+                                            density_vec = density_vec)
+    
+    #Process model formulation
+    set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
+    mod_run <- set_up_model$run(t = 1:length(density_vec))
+    out <- set_up_model$transform_variables(mod_run)
+    model_ran <- as.data.frame(out)
+    model_ran <- data.frame(id = x, model_ran)
+
+  }, simplify = FALSE)
+  
+  saveRDS(multi_outputs, file = "outputs/malaria_model_running_stephensi_profiles.rds")
+} else {
+  multi_outputs <- readRDS("outputs/malaria_model_running_stephensi_profiles.rds")
+}
+
+# Loading In Saved Runs and Combining Into Overall Data Frame
+for (i in 1:(length(steph_seasonality_list))) {
+  if (i == 1) {
+    temp <- multi_outputs[[i]][, c("id", "t", "prev", "Incidence", "mv")]
+  } else {
+    temp <- rbind(temp, multi_outputs[[i]][, c("id", "t", "prev", "Incidence", "mv")])
+  }
+}
+temp$id <- as.factor(temp$id)
+rm(multi_outputs)
+
+# Calculating Aggregate Quantities E.g. Degree of Seasonality, Time to 2% Etc
 time_to_2_percent <- c()
 time_to_2_percent_yearly_average <- c()
 seasonality <- c()
-for (i in 1:(length(scalar_values) + 1)) {
-  temp_calc <- multi_outputs[[i]]$prev
+for (i in 1:(length(steph_seasonality_list))) {
+  temp_calc <- temp$prev[temp$id == i]
   above_2_percent <- which(temp_calc > 0.02)[1]/365
   yearly_averages <- colMeans(matrix(temp_calc, nrow = 365))
   yearly_average_above_2_percent <- which(yearly_averages > 0.02)[1]
@@ -113,28 +155,169 @@ for (i in 1:(length(scalar_values) + 1)) {
   time_to_2_percent <- c(time_to_2_percent, above_2_percent)
   time_to_2_percent_yearly_average <- c(time_to_2_percent_yearly_average, yearly_average_above_2_percent)
   
-  seasonality <- c(seasonality, calc_incidence_seasonality(loc_seasonality_list[[i]], 3))
+  seasonality <- c(seasonality, calc_incidence_seasonality(steph_seasonality_list[[i]], 3))
 }
 
-# Plotting Seasonal Vector Profiles
-cols <- c("#A0CFD3", "#8D94BA", "#9A7AA0", "#87677B")
-ex_ind2 <- c(1, 3, 7, 11, 14, 17)
-cols_21 <- colorRampPalette(c(cols))
-seasonal_vector_plot <- ggplot(data = seasonal_profiles[seasonal_profiles$scalar %in% c(scalar_values[ex_ind2], 0), ], aes(x = time, y = 10 * density, colour = factor(scalar))) +
-  geom_line(size = 2) +
-  scale_colour_manual(values = rev(cols_21(length(ex_ind2) + 1))) +
-  theme_bw() +
-  labs(x = "Time (Days)", y = "Vector Density") +
-  theme(legend.position = "none")
-annual_vector_plot <- ggplot(dens_vec_df, aes(x = time, y = vector_density)) +
-  geom_line(size = 1) +
-  theme_bw() +
-  labs(x = "Time (Years)", y = "Annual Vector\nDensity") +
+# Subsets of the Data According to Unimodal/Bimodal, Rural/Urban & Cluster Membership
+
+## Unimodal/Bimodal
+unimodal <- which(features_df$peaks == 1)
+bimodal <- which(features_df$peaks == 2)
+unimodal_most <- unimodal[order(seasonality[unimodal])[26:50]]
+unimodal_least <- unimodal[order(seasonality[unimodal])[1:25]]
+
+## Urban/Rural
+urban <- which(features_df$peaks == 1 & features_df$cit == "Urban")
+rural_one <- which(features_df$peaks == 1 & features_df$cit == "Rural")
+rural_two <- which(features_df$peaks == 2 & features_df$cit == "Rural")
+
+## Cluster Membership
+one <- which(cluster_membership == 1)
+two <- which(cluster_membership == 2)
+three <- which(cluster_membership == 3)
+four <- which(cluster_membership == 4)
+
+## Mean Seasonality
+mean(seasonality[unimodal_most])
+mean(seasonality[unimodal_least])
+mean(seasonality[bimodal])
+
+mean(seasonality[urban])
+mean(seasonality[rural_one])
+mean(seasonality[rural_two])
+
+mean(seasonality[one])
+mean(seasonality[two])
+mean(seasonality[three])
+mean(seasonality[four])
+
+## Mean Time to 2 Percent
+mean(time_to_2_percent[unimodal_most])
+mean(time_to_2_percent[unimodal_least])
+mean(time_to_2_percent[bimodal])
+
+mean(time_to_2_percent[urban])
+mean(time_to_2_percent[rural_one])
+mean(time_to_2_percent[rural_two])
+
+mean(time_to_2_percent[one])
+mean(time_to_2_percent[two])
+mean(time_to_2_percent[three])
+mean(time_to_2_percent[four])
+
+plot(seasonality, time_to_2_percent)
+
+## Bimodal vs Unimodal Plotting
+
+
+unimodal_most_results <- temp[temp$id %in% unimodal_most, ]
+unimodal_most_summary <- summary_function(unimodal_most_results)
+
+unimodal_least_results <- temp[temp$id %in% unimodal_least, ]
+unimodal_least_summary <- summary_function(unimodal_least_results)
+
+bimodal_results <- temp[temp$id %in% bimodal, ]
+bimodal_summary <- summary_function(bimodal_results)
+
+ggplot() +
+  geom_ribbon(data = bimodal_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2) +
+  geom_ribbon(data = unimodal_least_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2, fill = "blue") +
+  geom_ribbon(data = unimodal_most_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2, fill = "red")
+
+
+ggplot(unimodal_summary, aes(x = t, y = 10000 * inc_mean)) +
   geom_line() +
-  lims(x = c(0, 6)) +
-  theme(axis.title = element_text(size = 10),
-        panel.background = element_blank())
-vector_plot <- seasonal_vector_plot + inset_element(annual_vector_plot, 0.01, 0.52, 0.50, 0.97)
+  geom_ribbon(aes(ymin = 10000 * inc_lower, ymax = 10000 * inc_upper), alpha = 0.2)
+
+ggplot(unimodal_summary, aes(x = t, y = prev_mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = prev_lower, ymax = prev_upper), alpha = 0.2)
+
+
+ggplot(bimodal_summary, aes(x = t, y = 10000 * inc_mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = 10000 * inc_lower, ymax = 10000 * inc_upper), alpha = 0.2)
+
+ggplot(bimodal_summary, aes(x = t, y = prev_mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = prev_lower, ymax = prev_upper), alpha = 0.2)
+
+
+
+unimodal_seasonality <- seasonality[unimodal]
+unimodal_most <- unimodal[order(unimodal_seasonality)[26:50]]
+unimodal_least <- unimodal[order(unimodal_seasonality)[1:25]]
+bimodal <- which(features_df$peaks == 2)
+
+
+urban_results <- temp[temp$id %in% urban, ]
+urban_summary <- urban_results %>%
+  dplyr::group_by(t) %>%
+  dplyr::summarise(prev_mean = mean(prev),
+                   prev_lower = prev_mean - 1.96 * sd(prev),
+                   prev_upper = prev_mean + 1.96 * sd(prev),
+                   inc_mean = mean(Incidence),
+                   inc_lower = inc_mean - 1.96 * sd(Incidence),
+                   inc_upper = inc_mean + 1.96 * sd(Incidence))
+urban_summary$prev_lower[urban_summary$prev_lower < 0] <- 0
+urban_summary$inc_lower[urban_summary$inc_lower < 0] <- 0
+
+rural_one_results <- temp[temp$id %in% rural_one, ]
+rural_one_summary <- rural_one_results %>%
+  dplyr::group_by(t) %>%
+  dplyr::summarise(prev_mean = mean(prev),
+                   prev_lower = prev_mean - 1.96 * sd(prev),
+                   prev_upper = prev_mean + 1.96 * sd(prev),
+                   inc_mean = mean(Incidence),
+                   inc_lower = inc_mean - 1.96 * sd(Incidence),
+                   inc_upper = inc_mean + 1.96 * sd(Incidence))
+rural_one_summary$prev_lower[rural_one_summary$prev_lower < 0] <- 0
+rural_one_summary$inc_lower[rural_one_summary$inc_lower < 0] <- 0
+
+rural_two_results <- temp[temp$id %in% rural_two, ]
+rural_two_summary <- rural_two_results %>%
+  dplyr::group_by(t) %>%
+  dplyr::summarise(prev_mean = mean(prev),
+                   prev_lower = prev_mean - 1.96 * sd(prev),
+                   prev_upper = prev_mean + 1.96 * sd(prev),
+                   inc_mean = mean(Incidence),
+                   inc_lower = inc_mean - 1.96 * sd(Incidence),
+                   inc_upper = inc_mean + 1.96 * sd(Incidence))
+rural_two_summary$prev_lower[rural_two_summary$prev_lower < 0] <- 0
+rural_two_summary$inc_lower[rural_two_summary$inc_lower < 0] <- 0
+
+ggplot() +
+  geom_ribbon(data = urban_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), alpha = 0.2) +
+  geom_ribbon(data = rural_one_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), alpha = 0.2, fill = "blue") +
+  geom_ribbon(data = rural_two_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), alpha = 0.2, fill = "red")
+
+
+
+
+  lims(x = c(0, 10000)) +
+  scale_x_continuous(limits = c(0,10000), expand = c(0, 0)) +
+  scale_color_manual(values = cols) +
+  facet_wrap(~factor(id), nrow = 4) +
+  labs(x = "Time (Days)", y = "Incidence Per 10,000 Population") +
+  theme_bw() + 
+  scale_y_continuous(limits = c(-1,14), expand = c(0, 0), position = "left",
+                     breaks = c(0, 5, 10)) +
+  theme(legend.position = "none", 
+        #panel.grid.major.x = element_line(colour="grey", size=0.5),
+        strip.background = element_blank(),
+        strip.text.x = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(),
+        axis.line.x = element_line(colour="black", size=0.5),
+        axis.line.x.bottom = element_line(colour="black", size=0.5),
+        axis.line.y.left = element_line(colour="black", size=0.5),
+        panel.spacing = unit(1, "lines")) +
+  #axis.line.y.right = element_line(colour="dark grey", size=0.5)) +
+  annotate("segment", x=-Inf, xend=Inf, y=-Inf, yend=-Inf, colour = "dark grey")
+
 
 # Plotting the Individual Malaria Profiles
 ex_ind <- c(1, 7, 14, 21)
@@ -232,6 +415,34 @@ seasonal_establishment_plot <- ggplot(seasonality_dynamics_df, aes(x = mal_seas,
 left <- plot_grid(vector_plot, seasonal_establishment_plot, nrow = 2, align = "v", axis = "lrtl")
 overall <- plot_grid(left, malaria_plots, rel_widths = c(1, 2))
 #7.5 x 15
+
+# # Plotting Seasonal Vector Profiles
+# cols <- c("#A0CFD3", "#8D94BA", "#9A7AA0", "#87677B")
+# ex_ind2 <- c(1, 3, 7, 11, 14, 17)
+# cols_21 <- colorRampPalette(c(cols))
+# seasonal_vector_plot <- ggplot(data = seasonal_profiles[seasonal_profiles$scalar %in% c(scalar_values[ex_ind2], 0), ], aes(x = time, y = 10 * density, colour = factor(scalar))) +
+#   geom_line(size = 2) +
+#   scale_colour_manual(values = rev(cols_21(length(ex_ind2) + 1))) +
+#   theme_bw() +
+#   labs(x = "Time (Days)", y = "Vector Density") +
+#   theme(legend.position = "none")
+# annual_vector_plot <- ggplot(dens_vec_df, aes(x = time, y = vector_density)) +
+#   geom_line(size = 1) +
+#   theme_bw() +
+#   labs(x = "Time (Years)", y = "Annual Vector\nDensity") +
+#   geom_line() +
+#   lims(x = c(0, 6)) +
+#   theme(axis.title = element_text(size = 10),
+#         panel.background = element_blank())
+# vector_plot <- seasonal_vector_plot + inset_element(annual_vector_plot, 0.01, 0.52, 0.50, 0.97)
+
+
+
+
+
+
+
+
 
 # (optional) Specifies whether graphs in the grid should be horizontally ("h") 
 # or vertically ("v") aligned. Options are "none" (default), "hv" (align in both
