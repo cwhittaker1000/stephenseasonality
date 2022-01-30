@@ -205,11 +205,12 @@ mean(time_to_2_percent[two])
 mean(time_to_2_percent[three])
 mean(time_to_2_percent[four])
 
-plot(seasonality, time_to_2_percent)
+plot(seasonality, time_to_2_percent/min(time_to_2_percent), pch = 20, xlab = "% Annual Catch In 3 Months", ylab = "Relative Time to 2%")
+
+# Plotting Seasonal Vector Profiles
+unimodal_most_vectors <- steph_seasonality_list[unimodal_most]
 
 ## Bimodal vs Unimodal Plotting
-
-
 unimodal_most_results <- temp[temp$id %in% unimodal_most, ]
 unimodal_most_summary <- summary_function(unimodal_most_results)
 
@@ -225,8 +226,59 @@ ggplot() +
   geom_ribbon(data = unimodal_least_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
               alpha = 0.2, fill = "blue") +
   geom_ribbon(data = unimodal_most_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2, fill = "red") +
+  labs(x = "Time (Days)", y = "Prevalence (%)")
+
+## Rural/Urban Plotting 
+urban_results <- temp[temp$id %in% urban, ]
+urban_summary <- summary_function(urban_results)
+
+rural_one_results <- temp[temp$id %in% rural_one, ]
+rural_one_summary <- summary_function(rural_one_results)
+
+rural_two_results <- temp[temp$id %in% rural_two, ]
+rural_two_summary <- summary_function(rural_two_results)
+
+ggplot() +
+  geom_ribbon(data = urban_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2) +
+  geom_ribbon(data = rural_one_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2, fill = "blue") +
+  geom_ribbon(data = rural_two_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
               alpha = 0.2, fill = "red")
 
+## Cluster Plotting
+one_results <- temp[temp$id %in% one, ]
+one_summary <- summary_function(one_results)
+one_summary$id <- 1
+
+two_results <- temp[temp$id %in% two, ]
+two_summary <- summary_function(two_results)
+two_summary$id <- 2
+
+three_results <- temp[temp$id %in% three, ]
+three_summary <- summary_function(three_results)
+three_summary$id <- 3
+
+four_results <- temp[temp$id %in% four, ]
+four_summary <- summary_function(four_results)
+four_summary$id <- 4
+
+ggplot() +
+  geom_ribbon(data = one_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2, fill = "#E0521A") +
+  geom_ribbon(data = two_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2, fill = "#3F88C5") +
+  geom_ribbon(data = three_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2, fill = "#44BBA4") +
+  geom_ribbon(data = three_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2, fill = "#393E41")
+
+cluster_summary <- rbind(one_summary, two_summary, three_summary, four_summary)
+ggplot() +
+  geom_ribbon(data = cluster_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper, fill = factor(id)), 
+              alpha = 0.2) +
+  facet_wrap(~id, nrow = 4)
 
 ggplot(unimodal_summary, aes(x = t, y = 10000 * inc_mean)) +
   geom_line() +

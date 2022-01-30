@@ -221,7 +221,7 @@ malaria_plots <- example_malaria + inset_element(test1, 0.05, 0.82, 0.22, 0.97) 
 # Plotting Seasonality vs Time to 2%
 seasonality_dynamics_df <- data.frame(mal_seas = seasonality, rel_time = time_to_2_percent/min(time_to_2_percent))
 seasonal_establishment_plot <- ggplot(seasonality_dynamics_df, aes(x = mal_seas, y = rel_time, col = mal_seas)) +
-  scale_colour_gradientn(colours=cols) +
+  scale_colour_gradientn(colours=rev(cols)) +
   geom_line(size = 2) +
   theme_bw() +
   labs(x = "% Malaria Incidence In Any 3 Month period",
