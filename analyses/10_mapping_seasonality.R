@@ -66,6 +66,7 @@ som <- read.csv("data/environmental_covariates/SOM_environment_data.csv") %>%
   mutate(country_India = 0, country_Iran = 0) %>%
   dplyr::select(lat, lon, vars_from_rf)
 hoa <- rbind(dji, eth, eri, sdn, som)
+hoa$population_per_1km <- log(hoa$population_per_1km)
 
 # Regenerating the same recipe used in the Random Forest Fitting to Process this New Data
 data_for_recipe_recapit <- data %>%
@@ -85,9 +86,18 @@ juiced_HOA <- bake(envt_prepped_ups, hoa) %>%
 ## load em in
 ## fit_final_random_forest_fit_ups <- _________
 juiced_HOA$country_peaks <- "bloop" # add dummy category
-predictions <- predict(final_random_forest_fit_ups, juiced_HOA, "prob")
+
+iterations_ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds"))
+final_random_forest_fit_ups <- iterations_ups$model[[1]]
+predictions <- predict(final_random_forest_fit_ups, juiced_HOA[4030, ], "prob")
+
 peaks <- ifelse(predictions$.pred_one >= 0.5, "one", "two")
-df_spat <- data.table(peaks = peaks, lon = juiced_HOA$lon, lat = juiced_HOA$lat)
+df_spat <- data.table(peaks = peaks, lon = juiced_HOA$lon, lat = juiced_HOA$lat,
+                      pred_one = predictions$.pred_one, log_pop = juiced_HOA$population_per_1km)
 DT_sf <- st_as_sf(df_spat, coords = c("lon", "lat"), crs = 4326)
 ggplot(DT_sf) +
-  geom_sf(aes(col = peaks))
+  geom_sf(aes(col = pred_one))
+
+ggplot(DT_sf) +
+  geom_sf(aes(col = log_pop))
+
