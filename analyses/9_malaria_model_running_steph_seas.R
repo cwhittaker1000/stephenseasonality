@@ -36,15 +36,31 @@ summary_function <- function(x) {
   temp <- x %>%
     dplyr::group_by(t) %>%
     dplyr::summarise(prev_mean = mean(prev),
-                     prev_lower = quantile(prev, 0.10),
-                     prev_upper = quantile(prev, 0.90),
+                     prev_lower = quantile(prev, 0.05),
+                     prev_upper = quantile(prev, 0.95),
                      inc_mean = mean(Incidence),
-                     inc_lower = quantile(Incidence, 0.10),
-                     inc_upper = quantile(Incidence, 0.90))
+                     inc_lower = quantile(Incidence, 0.05),
+                     inc_upper = quantile(Incidence, 0.95))
+    # dplyr::summarise(prev_mean = mean(prev),
+    #                  prev_lower = min(prev),
+    #                  prev_upper = max(prev),
+    #                  inc_mean = mean(Incidence),
+    #                  inc_lower = min(Incidence),
+    #                  inc_upper = max(Incidence))
   temp$prev_lower[temp$prev_lower < 0] <- 0
   temp$inc_lower[temp$inc_lower < 0] <- 0
   return(temp)
 }
+
+inset_theme <- theme_bw() +
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.background = element_blank(),
+        strip.background = element_blank(),
+        plot.margin=grid::unit(c(0,0,-5,-5), "mm"),
+        axis.text.x = element_text(size = 7),
+        axis.title = element_text(size = 7))
 
 # Extracting Mean Realisation for Each Time-Series
 set.seed(10)
@@ -210,6 +226,26 @@ plot(seasonality, time_to_2_percent/min(time_to_2_percent), pch = 20, xlab = "% 
 # Plotting Seasonal Vector Profiles
 unimodal_most_vectors <- steph_seasonality_list[unimodal_most]
 
+## Overall Plotting
+overall_summary <- summary_function(temp)
+# overall_summary <- temp %>%
+#   dplyr::group_by(t) %>%
+#   dplyr::summarise(prev_mean = mean(prev),
+#                    prev_lower = quantile(prev, 0.01),
+#                    prev_upper = quantile(prev, 0.99),
+#                    inc_mean = mean(Incidence),
+#                    inc_lower = quantile(Incidence, 0.01),
+#                    inc_upper = quantile(Incidence, 0.99))
+# overall_summary$prev_lower[temp$prev_lower < 0] <- 0
+# overall_summary$inc_lower[temp$inc_lower < 0] <- 0
+
+ggplot() +
+  geom_ribbon(data = overall_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+              alpha = 0.2)
+ggplot() +
+  geom_ribbon(data = overall_summary, aes(x = t, ymin = inc_lower, ymax = inc_upper), 
+              alpha = 0.2)
+
 ## Bimodal vs Unimodal Plotting
 unimodal_most_results <- temp[temp$id %in% unimodal_most, ]
 unimodal_most_summary <- summary_function(unimodal_most_results)
@@ -251,34 +287,100 @@ ggplot() +
 one_results <- temp[temp$id %in% one, ]
 one_summary <- summary_function(one_results)
 one_summary$id <- 1
+one_vectors <- matrix(unlist(steph_seasonality_list[one]), nrow = 365)
+mean_one_vec <- data.frame(t = 1:365, density = apply(one_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
+mean_one_vec$lower <- apply(one_vectors, 1, quantile, 0.05)/sum(apply(one_vectors, 1, mean))
+mean_one_vec$upper <- apply(one_vectors, 1, quantile, 0.95)/sum(apply(one_vectors, 1, mean))
 
 two_results <- temp[temp$id %in% two, ]
 two_summary <- summary_function(two_results)
 two_summary$id <- 2
+two_vectors <- matrix(unlist(steph_seasonality_list[two]), nrow = 365)
+mean_two_vec <- data.frame(t = 1:365, density = apply(two_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
+mean_two_vec$lower <- apply(two_vectors, 1, quantile, 0.05)/sum(apply(two_vectors, 1, mean))
+mean_two_vec$upper <- apply(two_vectors, 1, quantile, 0.95)/sum(apply(two_vectors, 1, mean))
 
 three_results <- temp[temp$id %in% three, ]
 three_summary <- summary_function(three_results)
 three_summary$id <- 3
+three_vectors <- matrix(unlist(steph_seasonality_list[three]), nrow = 365)
+mean_three_vec <- data.frame(t = 1:365, density = apply(three_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
+mean_three_vec$lower <- apply(three_vectors, 1, quantile, 0.05)/sum(apply(three_vectors, 1, mean))
+mean_three_vec$upper <- apply(three_vectors, 1, quantile, 0.95)/sum(apply(three_vectors, 1, mean))
 
 four_results <- temp[temp$id %in% four, ]
 four_summary <- summary_function(four_results)
 four_summary$id <- 4
+four_vectors <- matrix(unlist(steph_seasonality_list[four]), nrow = 365)
+mean_four_vec <- data.frame(t = 1:365, density = apply(four_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
+mean_four_vec$lower <- apply(four_vectors, 1, quantile, 0.05)/sum(apply(four_vectors, 1, mean))
+mean_four_vec$upper <- apply(four_vectors, 1, quantile, 0.95)/sum(apply(four_vectors, 1, mean))
 
-ggplot() +
-  geom_ribbon(data = one_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
-              alpha = 0.2, fill = "#E0521A") +
-  geom_ribbon(data = two_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
-              alpha = 0.2, fill = "#3F88C5") +
-  geom_ribbon(data = three_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
-              alpha = 0.2, fill = "#44BBA4") +
-  geom_ribbon(data = three_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
-              alpha = 0.2, fill = "#393E41")
-
+cols <- c("#E0521A", "#3F88C5", "#44BBA4", "#393E41")
 cluster_summary <- rbind(one_summary, two_summary, three_summary, four_summary)
-ggplot() +
-  geom_ribbon(data = cluster_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper, fill = factor(id)), 
+malaria_plots <- ggplot(data = cluster_summary, aes(fill = factor(id))) +
+  geom_ribbon(aes(x = t, ymin = inc_lower, ymax = inc_upper), 
               alpha = 0.2) +
-  facet_wrap(~id, nrow = 4)
+  facet_wrap(~id, nrow = 4) +
+  lims(x = c(0, 10000)) +
+  scale_x_continuous(limits = c(0,10000), expand = c(0, 0)) +
+  scale_fill_manual(values = cols) +
+  labs(x = "Time (Days)", y = "Incidence Per 10,000 Population") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        strip.background = element_blank(),
+        strip.text.x = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(),
+        axis.line.x = element_line(colour="black", size=0.5),
+        axis.line.x.bottom = element_line(colour="black", size=0.5),
+        axis.line.y.left = element_line(colour="black", size=0.5),
+        panel.spacing = unit(1, "lines")) +
+  annotate("segment", x=-Inf, xend=Inf, y=-Inf, yend=-Inf, colour = "dark grey")
+
+
+
+test1 <- ggplot(mean_one_vec, aes(x = t, y = density)) +
+  geom_line(col = "#E0521A", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#E0521A", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_one_vec$upper))) +
+  inset_theme
+test2 <- ggplot(mean_two_vec, aes(x = t, y = density)) +
+  geom_line(col = "#3F88C5", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#3F88C5", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_two_vec$upper))) +
+  inset_theme
+test3 <- ggplot(mean_three_vec, aes(x = t, y = density)) +
+  geom_line(col = "#44BBA4", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#44BBA4", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_three_vec$upper))) + 
+  inset_theme
+test4 <- ggplot(mean_four_vec, aes(x = t, y = density)) +
+  geom_line(col = "#393E41", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#393E41", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_four_vec$upper))) +
+  inset_theme
+
+mean_cluster_seasonalities <- c(round(mean(seasonality[one]), 2), round(mean(seasonality[two]), 2), 
+                                round(mean(seasonality[three]), 2), round(mean(seasonality[four]), 2))
+cluster_malaria_plots <- malaria_plots + 
+  geom_label(data = cluster_seas_df, x = 8200, y = 0.0015, 
+            label = paste0("Mean Seasonality = ", mean_cluster_seasonalities),
+            fill = "white", label.size = NA) +
+  inset_element(test1, 0.05, 0.84, 0.22, 0.99) +
+  inset_element(test2, 0.05, 0.585, 0.22, 0.735) +
+  inset_element(test3, 0.05, 0.335, 0.22, 0.485) +
+  inset_element(test4, 0.05, 0.08, 0.22, 0.23) 
+
+ggplot(mean_four_vec, aes(x = t, y = density)) +
+  geom_line(col = "#393E41", size = 1) +
+  annotate("label", 
+           x = 0.00, y = 0.64,
+           label = paste0("Mean Seasonality = 1"))
 
 ggplot(unimodal_summary, aes(x = t, y = 10000 * inc_mean)) +
   geom_line() +
@@ -568,3 +670,14 @@ overall <- plot_grid(left, malaria_plots, rel_widths = c(1, 2))
 #     lines(colMeans(matrix(multi_outputs[[i]]$mv, nrow = 365)), col = palette()[i])
 #   }
 # }
+# 
+# 
+# ggplot() +
+#   geom_ribbon(data = one_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+#               alpha = 0.2, fill = "#E0521A") +
+#   geom_ribbon(data = two_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+#               alpha = 0.2, fill = "#3F88C5") +
+#   geom_ribbon(data = three_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+#               alpha = 0.2, fill = "#44BBA4") +
+#   geom_ribbon(data = three_summary, aes(x = t, ymin = prev_lower, ymax = prev_upper), 
+#               alpha = 0.2, fill = "#393E41")
