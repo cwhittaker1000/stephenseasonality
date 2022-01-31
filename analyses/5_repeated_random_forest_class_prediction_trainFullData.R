@@ -52,12 +52,12 @@ data$peaks <- as.factor(data$peaks)
 data$population_per_1km <- log(data$population_per_1km)
 
 # Storage Tibble for Results
-iterations <- tibble(seed = 1, iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
+iterations <- tibble(seed = 1, model = list(1), iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
                      cv_roc_auc = 1, cv_accuracy = 1, cv_one_peak_accuracy = 1, cv_two_peak_accuracy = 1,
                      test_predictions = list(1), test_roc_curve <- list(1),
                      test_roc_auc = 1, test_accuracy = 1, test_one_peak_accuracy = 1, test_two_peak_accuracy = 1,
                      importance = list(1))
-iterations_ups <- tibble(seed = 1, iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
+iterations_ups <- tibble(seed = 1, model = list(1), iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
                          cv_roc_auc = 1, cv_accuracy = 1, cv_one_peak_accuracy = 1, cv_two_peak_accuracy = 1,
                          test_predictions = list(1), test_roc_curve <- list(1),
                          test_roc_auc = 1, test_accuracy = 1, test_one_peak_accuracy = 1, test_two_peak_accuracy = 1,
@@ -89,7 +89,7 @@ for (i in 1:number_iterations) {
     update_role(country_peaks, new_role = "ID")           # when we do this, recipe is applied within each fold, and diff covariates are removed for each
   
   # Prepping Data - Selecting Variables, Creating Recipe - Upsampling to Balance Amount of Data for 1 and 2 Peaks
-  set.seed(915)
+  set.seed(915) ## does this need to be removed????
   envt_recipe_ups <- recipe(peaks  ~ ., data = data) %>%
     update_role(country_peaks, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
     step_center(all_numeric()) %>% 
@@ -229,6 +229,7 @@ for (i in 1:number_iterations) {
   
   # No Upsampling
   iterations[i, "seed"] <- seed
+  iterations[i, "model"] <- list(list(final_random_forest_fit))
   iterations[i, "iteration"] <- i
   iterations[i, "juiced"] <- list(list(juiced))
   iterations[i, "best_mtry"] <- best$mtry
@@ -247,6 +248,7 @@ for (i in 1:number_iterations) {
   
   ## Upsampling
   iterations_ups[i, "seed"] <- seed
+  iterations_ups[i, "model"] <- list(list(final_random_forest_fit_ups))
   iterations_ups[i, "iteration"] <- i
   iterations_ups[i, "juiced"] <- list(list(juiced_ups))
   iterations_ups[i, "best_mtry"] <- best_ups$mtry

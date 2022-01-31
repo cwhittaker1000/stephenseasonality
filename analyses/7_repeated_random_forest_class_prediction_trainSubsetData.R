@@ -52,12 +52,12 @@ data$peaks <- as.factor(data$peaks)
 data$population_per_1km <- log(data$population_per_1km)
 
 # Storage Tibble for Results
-iterations <- tibble(iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
+iterations <- tibble(seed = 1, model = list(1), iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
                      cv_roc_auc = 1, cv_accuracy = 1, cv_one_peak_accuracy = 1, cv_two_peak_accuracy = 1,
                      test_predictions = list(1), test_roc_curve <- list(1),
                      test_roc_auc = 1, test_accuracy = 1, test_one_peak_accuracy = 1, test_two_peak_accuracy = 1,
                      importance = list(1))
-iterations_ups <- tibble(iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
+iterations_ups <- tibble(seed = 1, model = list(1), iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
                          cv_roc_auc = 1, cv_accuracy = 1, cv_one_peak_accuracy = 1, cv_two_peak_accuracy = 1,
                          test_predictions = list(1), test_roc_curve <- list(1),
                          test_roc_auc = 1, test_accuracy = 1, test_one_peak_accuracy = 1, test_two_peak_accuracy = 1,
@@ -236,6 +236,8 @@ for (i in 2:number_iterations) {
   # Assigning Outputs to Tibble
   
   # No Upsampling
+  iterations[i, "seed"] <- seed
+  iterations[i, "model"] <- list(list(final_random_forest_fit))
   iterations[i, "iteration"] <- i
   iterations[i, "juiced"] <- list(list(juiced))
   iterations[i, "best_mtry"] <- best$mtry
@@ -253,6 +255,8 @@ for (i in 2:number_iterations) {
   iterations[i, "importance"] <- list(list(var_imp))
   
   ## Upsampling
+  iterations_ups[i, "seed"] <- seed
+  iterations_ups[i, "model"] <- list(list(final_random_forest_fit_ups))
   iterations_ups[i, "iteration"] <- i
   iterations_ups[i, "juiced"] <- list(list(juiced_ups))
   iterations_ups[i, "best_mtry"] <- best_ups$mtry

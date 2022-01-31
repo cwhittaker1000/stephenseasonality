@@ -79,7 +79,7 @@ new_names <- c("Study\nfrom\nIndia", "LC 180", "LC 150", "LC 11",
                "LC 122", "LC 120", "Rainfall\nColdest\nQuarter", "Rainfall\nSeasonality",
                "LC 20", "LC 30", "Population\nPer\nSquare Km", "LC 10")
 b_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
-                fill = mean_Importance)) +
+                          fill = mean_Importance)) +
   geom_bar(stat = "identity") +
   geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
                     ymax = mean_Importance + 1.96 * stdev_Importance)) +
@@ -113,7 +113,7 @@ new_names_ups <- c("Study\nfrom\nIndia", "LC 180", "LC 150", "LC 130", "LC 11", 
                    "LC 120", "LC 20", "LC 122", "LC 10", "Rainfall\nSeasonality", "LC 110",
                    "Temperature\nSeasonality", "LC 30", "Study\nfrom\nIran", "Population\nPer\nSquare Km")
 b_plot_ups <- ggplot(imp_ups, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
-                     fill = mean_Importance)) +
+                                  fill = mean_Importance)) +
   geom_bar(stat = "identity") +
   geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
                     ymax = mean_Importance + 1.96 * stdev_Importance)) +
@@ -297,7 +297,7 @@ dev.off()
 plot(features$per_ind_4_months, per_rain_4_months[1, ])
 
 per_rain_4_months <- t(apply(norm_rainfall_storage, 1, percent_incidence, number_of_months = 4, timepoints_per_month = 2))
-  
+
 per_rain_4_months <- per_rain_4_months[1, ]
 
 mean(per_rain_4_months[urban_rural == "Rural" & features[, "peaks"] == 1])
