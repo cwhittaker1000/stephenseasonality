@@ -10,11 +10,11 @@ eri <- read.csv("data/environmental_covariates/ERI_environment_data.csv")
 sdn <- read.csv("data/environmental_covariates/SDN_environment_data.csv")
 som <- read.csv("data/environmental_covariates/SOM_environment_data.csv")
 
-dji_shp <- st_as_sf(getData('GADM', country = 'DJI', level = 0))
-eth_shp <- st_as_sf(getData('GADM', country = 'ETH', level = 0))
-eri_shp <- st_as_sf(getData('GADM', country = 'ERI', level = 0))
-sdn_shp <- st_as_sf(getData('GADM', country = 'SDN', level = 0))
-som_shp <- st_as_sf(getData('GADM', country = 'SOM', level = 0))
+dji_shp <- st_as_sf(getData('GADM', country = 'DJI', level = 0, path = here("data/admin_units")))
+eth_shp <- st_as_sf(getData('GADM', country = 'ETH', level = 0, path = here("data/admin_units")))
+eri_shp <- st_as_sf(getData('GADM', country = 'ERI', level = 0, path = here("data/admin_units")))
+sdn_shp <- st_as_sf(getData('GADM', country = 'SDN', level = 0, path = here("data/admin_units")))
+som_shp <- st_as_sf(getData('GADM', country = 'SOM', level = 0, path = here("data/admin_units")))
 hoa_outline <- rbind(dji_shp, eth_shp, eri_shp, sdn_shp, som_shp)
 
 # Loading in Location Specific Data and Training the Recipe
@@ -101,9 +101,26 @@ juiced_HOA <- bake(envt_prepped_ups, hoa) %>%
 juiced_HOA$country_peaks <- "bloop" # add dummy category
 iterations_ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds"))
 final_random_forest_fit_ups <- iterations_ups$model[[1]]
-predictions <- predict(final_random_forest_fit_ups, juiced_HOA[1:length(dji$ISO), ], "prob")
+predictions <- predict(final_random_forest_fit_ups, juiced_HOA, "prob")
 peaks <- ifelse(predictions$.pred_one >= 0.5, "one", "two")
 
+# Plotting as Non-Raster
+df_spat <- data.table(peaks = peaks, lon = juiced_HOA$lon, lat = juiced_HOA$lat, pred_one = predictions$.pred_one, log_pop = juiced_HOA$population_per_1km)
+DT_sf <- st_as_sf(df_spat, coords = c("lon", "lat"), crs = 4326)
+ggplot() +
+  geom_sf(data = DT_sf, aes(col = pred_one)) +
+  geom_sf(data = hoa_outline, col = "black", fill = NA, size = 1.2) +
+  scale_colour_gradient2(low = muted("red"),
+                         mid = "white",
+                         high = muted("blue"),
+                         midpoint = 0.5,
+                         limits = c(0, 1),
+                         space = "Lab",
+                         na.value = "grey50",
+                         guide = "colourbar",
+                         aesthetics = "colour")
+
+# Plotting as Rasters
 dji_predictions <- predict(final_random_forest_fit_ups, juiced_HOA[1:length(dji$ISO), ], "prob")
 dji_raster <- raster(ncol = dji$ncol[1], nrow = dji$nrow[1], ext = extent(dji_shp))
 dji_raster[dji$cell] <- dji_predictions$.pred_one
@@ -139,26 +156,6 @@ som_raster_plot <- as.data.frame(as(som_raster, "SpatialPixelsDataFrame"))
 som_raster_plot$lat <- som$lat
 som_raster_plot$lon <- som$lon
 
-
-extent(dji_shp)
-extent(eth_shp)
-extent(eri_shp)
-extent(sdn_shp)
-extent(som_shp)
-
-xmin <- 21
-xmax <- 48
-ymin <- -2
-ymax <- 15
-
-overall_raster <- as.data.frame(as(c(dji_raster, eth_raster, eri_raster, sdn_raster, som_raster), "SpatialPixelsDataFrame"))
-
-x <- list(dji_raster, eth_raster)
-x$fun <- mean
-x$na.rm <- TRUE
-x$tolerance <- 100
-combined_raster <- do.call(merge, x)
-
 snap <- raster(resolution = c(0.09748167,0.09746483), xmn = 21, xmx = 60, ymn = -2, ymx = 25)
 snap$layer <- NA
 dji_file <- projectRaster(dji_raster, snap, method = "bilinear")
@@ -166,106 +163,50 @@ eth_file <- projectRaster(eth_raster, snap, method = "bilinear")
 eri_file <- projectRaster(eri_raster, snap, method = "bilinear")
 sdn_file <- projectRaster(sdn_raster, snap, method = "bilinear")
 som_file <- projectRaster(som_raster, snap, method = "bilinear")
-
-plot(dji_file)
-plot(eth_file)
-plot(eri_file)
-plot(sdn_file)
-plot(som_file)
-
 x <- list(dji_file, eth_file, eri_file, sdn_file, som_file)
 x$fun <- mean
 x$na.rm <- TRUE
 x$tolerance <- 1
 combined_raster <- do.call(merge, x)
-plot(combined_raster)
 
+ken_shp <- st_as_sf(getData('GADM', country = 'KEN', level = 0, path = here("data/admin_units")))
+egy_shp <- st_as_sf(getData('GADM', country = 'EGY', level = 0, path = here("data/admin_units")))
+uga_shp <- st_as_sf(getData('GADM', country = 'UGA', level = 0, path = here("data/admin_units")))
+drc_shp <- st_as_sf(getData('GADM', country = 'COD', level = 0, path = here("data/admin_units")))
+ssd_shp <- st_as_sf(getData('GADM', country = 'SSD', level = 0, path = here("data/admin_units")))
+car_shp <- st_as_sf(getData('GADM', country = 'CAF', level = 0, path = here("data/admin_units")))
+chad_shp <- st_as_sf(getData('GADM', country = 'TCD', level = 0, path = here("data/admin_units")))
+lib_shp <- st_as_sf(getData('GADM', country = 'LBY', level = 0, path = here("data/admin_units")))
+rwa_shp <- st_as_sf(getData('GADM', country = 'RWA', level = 0, path = here("data/admin_units")))
+tan_shp <- st_as_sf(getData('GADM', country = 'TZA', level = 0, path = here("data/admin_units")))
+bdi_shp <- st_as_sf(getData('GADM', country = 'BDI', level = 0, path = here("data/admin_units")))
+sda_shp <- st_as_sf(getData('GADM', country = 'SAU', level = 0, path = here("data/admin_units")))
+yem_shp <- st_as_sf(getData('GADM', country = 'YEM', level = 0, path = here("data/admin_units")))
+uae_shp <- st_as_sf(getData('GADM', country = 'ARE', level = 0, path = here("data/admin_units")))
+oman_shp <- st_as_sf(getData('GADM', country = 'OMN', level = 0, path = here("data/admin_units")))
+qat_shp <- st_as_sf(getData('GADM', country = 'QAT', level = 0, path = here("data/admin_units")))
+
+hoa_neighbours <- rbind(ken_shp, egy_shp, uga_shp, drc_shp, ssd_shp, car_shp, uae_shp, oman_shp,
+                        chad_shp, lib_shp, rwa_shp, tan_shp, bdi_shp, sda_shp, yem_shp, qat_shp)
+
+# lat and lon are wrong way round currently
 raster_plot <- as.data.frame(as(combined_raster, "SpatialPixelsDataFrame"))
 ggplot() +
   geom_tile(data = raster_plot, aes(x = x, y = y, fill = layer)) +
-  geom_sf(data = hoa_outline, col = "black", fill = NA, size = 1.2) 
-
-dji_test <- dji_raster
-dji_test$layer[is.na(dji_test$layer)] <- 0
-dji_file <- projectRaster(dji_test, snap, method = "bilinear")
-plot(dji_file)
-
-snap[1:48918]
-dji_raster$layer[1:306]
-dji_test$layer[1:306]
-dji_file[1:48198]
-
-sum(dji_raster$layer[1:306], na.rm = TRUE)
-sum(dji_file$layer[1:48198], na.rm = TRUE)
-
-eth_file <- projectRaster(eth_raster, snap, method = "ngb")
-x <- list(dji_file, eth_file)
-names(x) <- NULL
-x$fun <- mean
-mos <- do.call(raster::mosaic, x)
-plot(mos)
-
-mos_plot <- as.data.frame(as(mos, "SpatialPixelsDataFrame"))
-mos_plot$lat <- som$lat
-mos_plot$lon <- som$lon
-
-ggplot() +
-  geom_tile(data = overall_raster, aes(x = lon, y = lat, fill = layer))
-
-
-combined_raster <- Reduce("+", x)
-
-origin(dji_raster) <- origin(eth_raster)
-
-
-overall_raster <- rbind(dji_raster_plot, eth_raster_plot, eri_raster_plot, sdn_raster_plot, som_raster_plot)
-
-as(dji_raster, "SpatialPixelsDataFrame")
-as(rbind(dji_raster), "SpatialPixelsDataFrame")
-
-typeof(dji_raster_plot)
-class(dji_raster_plot)
-typeof(rbind(dji_raster_plot))
-class()
-
-ggplot() +
-  geom_tile(data = overall_raster, aes(x = lon, y = lat, fill = layer))
-
-ggplot() +
-  geom_tile(data = dji_raster_plot, aes(x = lon, y = lat, fill = layer)) +
-  geom_tile(data = eth_raster_plot, aes(x = lon, y = lat, fill = layer)) +
-  geom_tile(data = eri_raster_plot, aes(x = lon, y = lat, fill = layer)) +
-  geom_tile(data = sdn_raster_plot, aes(x = lon, y = lat, fill = layer)) +
-  geom_tile(data = som_raster_plot, aes(x = lon, y = lat, fill = layer)) +
-  scale_fill_gradient2(low = muted("red"),
-                       mid = "white",
-                       high = muted("blue"),
-                       midpoint = 0.5,
-                       limits = c(0, 1),
-                       space = "Lab",
-                       na.value = "grey50",
-                       guide = "colourbar",
-                       aesthetics = "colour") +
-  geom_sf(data = hoa_outline, col = "black", fill = NA, size = 1.2) 
-
-
-df_spat <- data.table(peaks = peaks, lon = juiced_HOA$lon, lat = juiced_HOA$lat,
-                      pred_one = predictions$.pred_one, log_pop = juiced_HOA$population_per_1km)
-DT_sf <- st_as_sf(df_spat, coords = c("lon", "lat"), crs = 4326)
-ggplot() +
-  geom_sf(data = DT_sf, aes(col = pred_one)) +
-  geom_sf(data = hoa_outline, col = "black", fill = NA, size = 1.2) +
-  scale_colour_gradient2(low = muted("red"),
-                         mid = "white",
-                         high = muted("blue"),
-                         midpoint = 0.5,
-                         limits = c(0, 1),
-                         space = "Lab",
-                         na.value = "grey50",
-                         guide = "colourbar",
-                         aesthetics = "colour")
-  
-
-ggplot() +
-  geom_sf(data = DT_sf, aes(col = log_pop))
-
+  scale_fill_gradient2(low = muted("red"), mid = "white", high = muted("blue"),
+                       midpoint = 0.5, limits = c(0, 1), space = "Lab",
+                       na.value = "grey50", guide = "colourbar") +
+  geom_sf(data = hoa_neighbours, col = gray(0.6), fill = gray(0.90), size = 1) +
+  geom_sf(data = hoa_outline, col = "black", fill = NA, size = 1) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme_bw() +
+  lims(x = c(22, 52), y = c(-2, 25)) +
+  theme(panel.background = element_rect(fill = "aliceblue"),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 14, face = "bold"), 
+        axis.title.x = element_blank(), 
+        axis.title.y = element_blank(),
+        legend.position = "right", 
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 13, face = "bold")) +
+  guides(fill = guide_colourbar(title = "Prob.Single\nSeasonal Peak", ticks = FALSE))
