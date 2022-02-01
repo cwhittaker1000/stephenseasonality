@@ -11,6 +11,7 @@ options(scipen = 999)
 invisible(sapply(list.files("functions/malaria_model_running/", full.names = TRUE, recursive = TRUE), function(x) source(x)))
 source(here("functions", "time_series_characterisation_functions.R"))
 overall <- readRDS(file = here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
+urban_rural <- overall$city
 bionomics_data <- read.csv("data/bionomic_species_all_LHC_100.csv", stringsAsFactors = FALSE)
 stephensi_data <- round(as.data.frame(rbind(colMeans(subset(bionomics_data, species == "stephensi")[, c("Q0", "chi", "bites_Bed", "bites_Indoors")]))), 2)
 features_df <- readRDS(file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
@@ -156,7 +157,7 @@ for (i in 1:(length(steph_seasonality_list))) {
   }
 }
 temp$id <- as.factor(temp$id)
-rm(multi_outputs)
+#rm(multi_outputs)
 
 # Calculating Aggregate Quantities E.g. Degree of Seasonality, Time to 2% Etc
 time_to_2_percent <- c()
@@ -173,6 +174,271 @@ for (i in 1:(length(steph_seasonality_list))) {
   
   seasonality <- c(seasonality, calc_incidence_seasonality(steph_seasonality_list[[i]], 3))
 }
+
+
+####### CLUSTER FIGURE EXAMPLE ####### 
+one_results <- temp[temp$id %in% which(cluster_membership == 1), ]
+one_summary <- summary_function(one_results)
+one_summary$id <- 1
+one_vectors <- matrix(unlist(steph_seasonality_list[which(cluster_membership == 1)]), nrow = 365)
+mean_one_vec <- data.frame(t = 1:365, density = apply(one_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
+mean_one_vec$lower <- apply(one_vectors, 1, quantile, 0.05)/sum(apply(one_vectors, 1, mean))
+mean_one_vec$upper <- apply(one_vectors, 1, quantile, 0.95)/sum(apply(one_vectors, 1, mean))
+
+two_results <- temp[temp$id %in% which(cluster_membership == 2), ]
+two_summary <- summary_function(two_results)
+two_summary$id <- 2
+two_vectors <- matrix(unlist(steph_seasonality_list[which(cluster_membership == 2)]), nrow = 365)
+mean_two_vec <- data.frame(t = 1:365, density = apply(two_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
+mean_two_vec$lower <- apply(two_vectors, 1, quantile, 0.05)/sum(apply(two_vectors, 1, mean))
+mean_two_vec$upper <- apply(two_vectors, 1, quantile, 0.95)/sum(apply(two_vectors, 1, mean))
+
+three_results <- temp[temp$id %in%  which(cluster_membership == 3), ]
+three_summary <- summary_function(three_results)
+three_summary$id <- 3
+three_vectors <- matrix(unlist(steph_seasonality_list[which(cluster_membership == 3)]), nrow = 365)
+mean_three_vec <- data.frame(t = 1:365, density = apply(three_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
+mean_three_vec$lower <- apply(three_vectors, 1, quantile, 0.05)/sum(apply(three_vectors, 1, mean))
+mean_three_vec$upper <- apply(three_vectors, 1, quantile, 0.95)/sum(apply(three_vectors, 1, mean))
+
+four_results <- temp[temp$id %in% which(cluster_membership == 4), ]
+four_summary <- summary_function(four_results)
+four_summary$id <- 4
+four_vectors <- matrix(unlist(steph_seasonality_list[which(cluster_membership == 4)]), nrow = 365)
+mean_four_vec <- data.frame(t = 1:365, density = apply(four_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
+mean_four_vec$lower <- apply(four_vectors, 1, quantile, 0.05)/sum(apply(four_vectors, 1, mean))
+mean_four_vec$upper <- apply(four_vectors, 1, quantile, 0.95)/sum(apply(four_vectors, 1, mean))
+
+mean_cluster_seasonalities <- c(round(mean(seasonality[which(cluster_membership == 1)]), 2), 
+                                round(mean(seasonality[which(cluster_membership == 2)]), 2), 
+                                round(mean(seasonality[which(cluster_membership == 3)]), 2), 
+                                round(mean(seasonality[which(cluster_membership == 4)]), 2))
+cols <- c("#E0521A", "#3F88C5", "#44BBA4", "#393E41")
+cluster_summary <- rbind(one_summary, two_summary, three_summary, four_summary)
+malaria_plots <- ggplot(data = cluster_summary, aes(fill = factor(id))) +
+  geom_ribbon(aes(x = t, ymin = inc_lower, ymax = inc_upper), 
+              alpha = 0.2) +
+  facet_wrap(~id, nrow = 4) +
+  lims(x = c(0, 10000)) +
+  scale_x_continuous(limits = c(0,10000), expand = c(0, 0)) +
+  scale_fill_manual(values = cols) +
+  labs(x = "Time (Days)", y = "Incidence Per 10,000 Population") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        strip.background = element_blank(),
+        strip.text.x = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(),
+        axis.line.x = element_line(colour="black", size=0.5),
+        axis.line.x.bottom = element_line(colour="black", size=0.5),
+        axis.line.y.left = element_line(colour="black", size=0.5),
+        panel.spacing = unit(1, "lines")) +
+  annotate("segment", x=-Inf, xend=Inf, y=-Inf, yend=-Inf, colour = "dark grey")
+
+test1 <- ggplot(mean_one_vec, aes(x = t, y = density)) +
+  geom_line(col = "#E0521A", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#E0521A", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_one_vec$upper))) +
+  inset_theme
+test2 <- ggplot(mean_two_vec, aes(x = t, y = density)) +
+  geom_line(col = "#3F88C5", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#3F88C5", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_two_vec$upper))) +
+  inset_theme
+test3 <- ggplot(mean_three_vec, aes(x = t, y = density)) +
+  geom_line(col = "#44BBA4", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#44BBA4", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_three_vec$upper))) + 
+  inset_theme
+test4 <- ggplot(mean_four_vec, aes(x = t, y = density)) +
+  geom_line(col = "#393E41", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#393E41", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_four_vec$upper))) +
+  inset_theme
+
+cluster_seas_plotdf <- data.frame(seasonality = seasonality, 
+                                  rel_time = time_to_2_percent/min(time_to_2_percent),
+                                  id = cluster_membership)
+cluster_seas_meandf <- data.frame(id = c(1, 2, 3, 4),
+                                  seasonality = c(mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == 1]),
+                                                  mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == 2]),
+                                                  mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == 3]),
+                                                  mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == 4])))
+cluster_malaria_plots <- malaria_plots + 
+  geom_label(data = cluster_seas_meandf, x = 8200, y = 0.0015, 
+             label = paste0("Mean Seasonality = ", mean_cluster_seasonalities),
+             fill = "white", label.size = NA) +
+  inset_element(test1, 0.05, 0.84, 0.22, 0.99) +
+  inset_element(test2, 0.05, 0.585, 0.22, 0.735) +
+  inset_element(test3, 0.05, 0.335, 0.22, 0.485) +
+  inset_element(test4, 0.05, 0.08, 0.22, 0.23) 
+
+## Cluster Seasonality vs Time to 2%
+seasonality_timing <- ggplot(cluster_seas_plotdf, aes(x = seasonality, y = rel_time)) +
+  geom_smooth(col = "black") +
+  geom_point(size = 2, aes(col = factor(id))) +
+  scale_y_continuous(position = "right") +
+  scale_colour_manual(values = cols) +
+  labs(x = "% Annual Catch In 3 Months", y = "Relative Time to 2%") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+## Peak Seasonal Incidence
+max_incidence <- temp %>%
+  group_by(id) %>%
+  dplyr::summarise(max_inc = max(Incidence))
+mean_max_incidence <- data.frame(id = factor(c(1, 2, 3, 4)),
+                                 max_inc = c(mean(max_incidence$max_inc[which(cluster_membership == 1)]),
+                                             mean(max_incidence$max_inc[which(cluster_membership == 2)]),
+                                             mean(max_incidence$max_inc[which(cluster_membership == 3)]),
+                                             mean(max_incidence$max_inc[which(cluster_membership == 4)])),
+                                 low_inc = c(min(max_incidence$max_inc[which(cluster_membership == 1)]),
+                                             min(max_incidence$max_inc[which(cluster_membership == 2)]),
+                                             min(max_incidence$max_inc[which(cluster_membership == 3)]),
+                                             min(max_incidence$max_inc[which(cluster_membership == 4)])),
+                                 high_inc = c(max(max_incidence$max_inc[which(cluster_membership == 1)]),
+                                              max(max_incidence$max_inc[which(cluster_membership == 2)]),
+                                              max(max_incidence$max_inc[which(cluster_membership == 3)]),
+                                              max(max_incidence$max_inc[which(cluster_membership == 4)])))
+seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = max_inc, fill = id)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = low_inc, ymax = high_inc), width = 0.5) +
+  scale_fill_manual(values = cols) +
+  scale_x_discrete(labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")) +
+  scale_y_continuous(position = "right") +
+  labs(x = "", y = "Maximum Annual Incidence") +
+  theme_bw() +
+  theme(legend.position = "none") 
+
+rhs <- plot_grid(seasonality_timing, seasonality_max_incidence, nrow = 2, align = "v", axis = "b")
+overall <- plot_grid(cluster_malaria_plots, rhs, rel_widths = c(2, 1))
+
+
+####### URBAN RURAL FIGURE EXAMPLE ####### 
+urban_results <- temp[temp$id %in% which(urban_rural == "Urban"), ]
+urban_summary <- summary_function(urban_results)
+urban_summary$id <- "Urban"
+urban_vectors <- matrix(unlist(steph_seasonality_list[which(urban_rural == "Urban")]), nrow = 365)
+mean_urban_vec <- data.frame(t = 1:365, density = apply(urban_vectors, 1, mean)/sum(apply(urban_vectors, 1, mean)))
+mean_urban_vec$lower <- apply(urban_vectors, 1, quantile, 0.05)/sum(apply(urban_vectors, 1, mean))
+mean_urban_vec$upper <- apply(urban_vectors, 1, quantile, 0.95)/sum(apply(urban_vectors, 1, mean))
+
+rural1_results <- temp[temp$id %in% which(urban_rural == "Rural" & features_df$peaks == 1), ]
+rural1_summary <- summary_function(rural1_results)
+rural1_summary$id <- "Rural One Peak"
+rural1_vectors <- matrix(unlist(steph_seasonality_list[which(urban_rural == "Rural" & features_df$peaks == 1)]), nrow = 365)
+mean_rural1_vec <- data.frame(t = 1:365, density = apply(rural1_vectors, 1, mean)/sum(apply(rural1_vectors, 1, mean)))
+mean_rural1_vec$lower <- apply(rural1_vectors, 1, quantile, 0.05)/sum(apply(rural1_vectors, 1, mean))
+mean_rural1_vec$upper <- apply(rural1_vectors, 1, quantile, 0.95)/sum(apply(rural1_vectors, 1, mean))
+
+rural2_results <- temp[temp$id %in% which(urban_rural == "Rural" & features_df$peaks == 2), ]
+rural2_summary <- summary_function(rural2_results)
+rural2_summary$id <- "Rural Two Peak"
+rural2_vectors <- matrix(unlist(steph_seasonality_list[which(urban_rural == "Rural" & features_df$peaks == 2)]), nrow = 365)
+mean_rural2_vec <- data.frame(t = 1:365, density = apply(rural2_vectors, 1, mean)/sum(apply(rural2_vectors, 1, mean)))
+mean_rural2_vec$lower <- apply(rural2_vectors, 1, quantile, 0.05)/sum(apply(rural2_vectors, 1, mean))
+mean_rural2_vec$upper <- apply(rural2_vectors, 1, quantile, 0.95)/sum(apply(rural2_vectors, 1, mean))
+
+mean_cluster_seasonalities <- c(round(mean(seasonality[which(urban_rural == "Urban")]), 2), 
+                                round(mean(seasonality[which(urban_rural == "Rural" & features_df$peaks == 1)]), 2), 
+                                round(mean(seasonality[which(urban_rural == "Rural" & features_df$peaks == 2)]), 2))
+cols <- c("#447604", "#6EA65D","#807A85")
+rur_urb_summary <- rbind(urban_summary, rural1_summary, rural2_summary)
+malaria_plots <- ggplot(data = rur_urb_summary, aes(fill = factor(id))) +
+  geom_ribbon(aes(x = t, ymin = inc_lower, ymax = inc_upper), 
+              alpha = 0.2) +
+  facet_wrap(~id, nrow = 3) +
+  lims(x = c(0, 10000)) +
+  scale_x_continuous(limits = c(0,10000), expand = c(0, 0)) +
+  scale_fill_manual(values = cols) +
+  labs(x = "Time (Days)", y = "Incidence Per 10,000 Population") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        strip.background = element_blank(),
+        strip.text.x = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(),
+        axis.line.x = element_line(colour="black", size=0.5),
+        axis.line.x.bottom = element_line(colour="black", size=0.5),
+        axis.line.y.left = element_line(colour="black", size=0.5),
+        panel.spacing = unit(1, "lines")) +
+  annotate("segment", x=-Inf, xend=Inf, y=-Inf, yend=-Inf, colour = "dark grey")
+
+test1 <- ggplot(mean_urban_vec, aes(x = t, y = density)) +
+  geom_line(col = "#807A85", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#807A85", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_urban_vec$upper))) +
+  inset_theme
+test2 <- ggplot(mean_rural1_vec, aes(x = t, y = density)) +
+  geom_line(col = "#447604", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#447604", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_rural1_vec$upper))) +
+  inset_theme
+test3 <- ggplot(mean_rural2_vec, aes(x = t, y = density)) +
+  geom_line(col = "#6EA65D", size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#6EA65D", alpha = 0.2) +
+  labs(x = "Time (Days)", y = "Vector Density") +
+  lims(y = c(0, max(mean_rural2_vec$upper))) + 
+  inset_theme
+
+cluster_seas_plotdf <- data.frame(seasonality = seasonality, 
+                                  rel_time = time_to_2_percent/min(time_to_2_percent),
+                                  id = overall$city)
+cluster_seas_meandf <- data.frame(id = c("Urban", "Rural One Peak", "Rural Two Peak"),
+                                  seasonality = c(mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == "Urban"]),
+                                                  mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == "Rural" & features_df$peaks == 1]),
+                                                  mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == "Rural" & features_df$peaks == 2])))
+cluster_malaria_plots <- malaria_plots + 
+  geom_label(data = cluster_seas_meandf, x = 8200, y = 0.0015, 
+             label = paste0("Mean Seasonality = ", mean_cluster_seasonalities),
+             fill = "white", label.size = NA) +
+  inset_element(test2, 0.05, 0.82, 0.22, 0.97) +
+  inset_element(test3, 0.05, 0.48, 0.22, 0.63) +
+  inset_element(test1, 0.05, 0.13, 0.22, 0.28) 
+
+# add in rural 1 and rural 2
+seasonality_timing <- ggplot(cluster_seas_plotdf[cluster_seas_plotdf$id != "Mixture/Unclear", ], aes(x = seasonality, y = rel_time)) +
+  geom_smooth(col = "black") +
+  geom_point(size = 2, aes(col = factor(id))) +
+  scale_y_continuous(position = "right") +
+  scale_colour_manual(values = cols) +
+  labs(x = "% Annual Catch In 3 Months", y = "Relative Time to 2%") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+max_incidence <- temp %>%
+  group_by(id) %>%
+  dplyr::summarise(max_inc = max(Incidence))
+mean_max_incidence <- data.frame(id = factor(c(1, 2, 3, 4)),
+                                 max_inc = c(mean(max_incidence$max_inc[which(cluster_membership == 1)]),
+                                             mean(max_incidence$max_inc[which(cluster_membership == 2)]),
+                                             mean(max_incidence$max_inc[which(cluster_membership == 3)]),
+                                             mean(max_incidence$max_inc[which(cluster_membership == 4)])),
+                                 low_inc = c(min(max_incidence$max_inc[which(cluster_membership == 1)]),
+                                             min(max_incidence$max_inc[which(cluster_membership == 2)]),
+                                             min(max_incidence$max_inc[which(cluster_membership == 3)]),
+                                             min(max_incidence$max_inc[which(cluster_membership == 4)])),
+                                 high_inc = c(max(max_incidence$max_inc[which(cluster_membership == 1)]),
+                                              max(max_incidence$max_inc[which(cluster_membership == 2)]),
+                                              max(max_incidence$max_inc[which(cluster_membership == 3)]),
+                                              max(max_incidence$max_inc[which(cluster_membership == 4)])))
+seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = max_inc, fill = id)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = low_inc, ymax = high_inc), width = 0.5) +
+  scale_fill_manual(values = cols) +
+  scale_x_discrete(labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")) +
+  scale_y_continuous(position = "right") +
+  labs(x = "", y = "Maximum Annual Incidence") +
+  theme_bw() +
+  theme(legend.position = "none") 
+
+########################
 
 # Subsets of the Data According to Unimodal/Bimodal, Rural/Urban & Cluster Membership
 
@@ -284,137 +550,6 @@ ggplot() +
               alpha = 0.2, fill = "red")
 
 ## Cluster Plotting
-one_results <- temp[temp$id %in% one, ]
-one_summary <- summary_function(one_results)
-one_summary$id <- 1
-one_vectors <- matrix(unlist(steph_seasonality_list[one]), nrow = 365)
-mean_one_vec <- data.frame(t = 1:365, density = apply(one_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
-mean_one_vec$lower <- apply(one_vectors, 1, quantile, 0.05)/sum(apply(one_vectors, 1, mean))
-mean_one_vec$upper <- apply(one_vectors, 1, quantile, 0.95)/sum(apply(one_vectors, 1, mean))
-
-two_results <- temp[temp$id %in% two, ]
-two_summary <- summary_function(two_results)
-two_summary$id <- 2
-two_vectors <- matrix(unlist(steph_seasonality_list[two]), nrow = 365)
-mean_two_vec <- data.frame(t = 1:365, density = apply(two_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
-mean_two_vec$lower <- apply(two_vectors, 1, quantile, 0.05)/sum(apply(two_vectors, 1, mean))
-mean_two_vec$upper <- apply(two_vectors, 1, quantile, 0.95)/sum(apply(two_vectors, 1, mean))
-
-three_results <- temp[temp$id %in% three, ]
-three_summary <- summary_function(three_results)
-three_summary$id <- 3
-three_vectors <- matrix(unlist(steph_seasonality_list[three]), nrow = 365)
-mean_three_vec <- data.frame(t = 1:365, density = apply(three_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
-mean_three_vec$lower <- apply(three_vectors, 1, quantile, 0.05)/sum(apply(three_vectors, 1, mean))
-mean_three_vec$upper <- apply(three_vectors, 1, quantile, 0.95)/sum(apply(three_vectors, 1, mean))
-
-four_results <- temp[temp$id %in% four, ]
-four_summary <- summary_function(four_results)
-four_summary$id <- 4
-four_vectors <- matrix(unlist(steph_seasonality_list[four]), nrow = 365)
-mean_four_vec <- data.frame(t = 1:365, density = apply(four_vectors, 1, mean)/sum(apply(one_vectors, 1, mean)))
-mean_four_vec$lower <- apply(four_vectors, 1, quantile, 0.05)/sum(apply(four_vectors, 1, mean))
-mean_four_vec$upper <- apply(four_vectors, 1, quantile, 0.95)/sum(apply(four_vectors, 1, mean))
-
-mean_cluster_seasonalities <- c(round(mean(seasonality[one]), 2), round(mean(seasonality[two]), 2), round(mean(seasonality[three]), 2), round(mean(seasonality[four]), 2))
-cols <- c("#E0521A", "#3F88C5", "#44BBA4", "#393E41")
-cluster_summary <- rbind(one_summary, two_summary, three_summary, four_summary)
-malaria_plots <- ggplot(data = cluster_summary, aes(fill = factor(id))) +
-  geom_ribbon(aes(x = t, ymin = inc_lower, ymax = inc_upper), 
-              alpha = 0.2) +
-  facet_wrap(~id, nrow = 4) +
-  lims(x = c(0, 10000)) +
-  scale_x_continuous(limits = c(0,10000), expand = c(0, 0)) +
-  scale_fill_manual(values = cols) +
-  labs(x = "Time (Days)", y = "Incidence Per 10,000 Population") +
-  theme_bw() + 
-  theme(legend.position = "none", 
-        strip.background = element_blank(),
-        strip.text.x = element_blank(),
-        panel.border = element_blank(),
-        axis.line = element_line(),
-        axis.line.x = element_line(colour="black", size=0.5),
-        axis.line.x.bottom = element_line(colour="black", size=0.5),
-        axis.line.y.left = element_line(colour="black", size=0.5),
-        panel.spacing = unit(1, "lines")) +
-  annotate("segment", x=-Inf, xend=Inf, y=-Inf, yend=-Inf, colour = "dark grey")
-
-test1 <- ggplot(mean_one_vec, aes(x = t, y = density)) +
-  geom_line(col = "#E0521A", size = 1) +
-  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#E0521A", alpha = 0.2) +
-  labs(x = "Time (Days)", y = "Vector Density") +
-  lims(y = c(0, max(mean_one_vec$upper))) +
-  inset_theme
-test2 <- ggplot(mean_two_vec, aes(x = t, y = density)) +
-  geom_line(col = "#3F88C5", size = 1) +
-  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#3F88C5", alpha = 0.2) +
-  labs(x = "Time (Days)", y = "Vector Density") +
-  lims(y = c(0, max(mean_two_vec$upper))) +
-  inset_theme
-test3 <- ggplot(mean_three_vec, aes(x = t, y = density)) +
-  geom_line(col = "#44BBA4", size = 1) +
-  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#44BBA4", alpha = 0.2) +
-  labs(x = "Time (Days)", y = "Vector Density") +
-  lims(y = c(0, max(mean_three_vec$upper))) + 
-  inset_theme
-test4 <- ggplot(mean_four_vec, aes(x = t, y = density)) +
-  geom_line(col = "#393E41", size = 1) +
-  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#393E41", alpha = 0.2) +
-  labs(x = "Time (Days)", y = "Vector Density") +
-  lims(y = c(0, max(mean_four_vec$upper))) +
-  inset_theme
-
-cluster_malaria_plots <- malaria_plots + 
-  geom_label(data = cluster_seas_df, x = 8200, y = 0.0015, 
-            label = paste0("Mean Seasonality = ", mean_cluster_seasonalities),
-            fill = "white", label.size = NA) +
-  inset_element(test1, 0.05, 0.84, 0.22, 0.99) +
-  inset_element(test2, 0.05, 0.585, 0.22, 0.735) +
-  inset_element(test3, 0.05, 0.335, 0.22, 0.485) +
-  inset_element(test4, 0.05, 0.08, 0.22, 0.23) 
-
-## Cluster Seasonality vs Time to 2%
-cluster_seas_plotdf <- data.frame(seasonality = seasonality, 
-                                  rel_time = time_to_2_percent/min(time_to_2_percent),
-                                  id = cluster_membership)
-seasonality_timing <- ggplot(cluster_seas_plotdf, aes(x = seasonality, y = rel_time)) +
-  geom_smooth(col = "black") +
-  geom_point(size = 2, aes(col = factor(id))) +
-  scale_y_continuous(position = "right") +
-  scale_colour_manual(values = cols) +
-  labs(x = "% Annual Catch In 3 Months", y = "Relative Time to 2%") +
-  theme_bw() +
-  theme(legend.position = "none")
-
-## Peak Seasonal Incidence
-max_incidence <- temp %>%
-  group_by(id) %>%
-  dplyr::summarise(max_inc = max(Incidence))
-mean_max_incidence <- data.frame(id = factor(c(1, 2, 3, 4)),
-                                 max_inc = c(mean(max_incidence$max_inc[one]),
-                                             mean(max_incidence$max_inc[two]),
-                                             mean(max_incidence$max_inc[three]),
-                                             mean(max_incidence$max_inc[four])),
-                                 low_inc = c(min(max_incidence$max_inc[one]),
-                                             min(max_incidence$max_inc[two]),
-                                             min(max_incidence$max_inc[three]),
-                                             min(max_incidence$max_inc[four])),
-                                 high_inc = c(max(max_incidence$max_inc[one]),
-                                              max(max_incidence$max_inc[two]),
-                                              max(max_incidence$max_inc[three]),
-                                              max(max_incidence$max_inc[four])))
-seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = max_inc, fill = id)) +
-  geom_bar(stat = "identity") +
-  geom_errorbar(aes(ymin = low_inc, ymax = high_inc), width = 0.5) +
-  scale_fill_manual(values = cols) +
-  scale_x_discrete(labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")) +
-  scale_y_continuous(position = "right") +
-  labs(x = "", y = "Maximum Annual Incidence") +
-  theme_bw() +
-  theme(legend.position = "none") 
-
-rhs <- plot_grid(seasonality_timing, seasonality_max_incidence, nrow = 2, align = "v", axis = "b")
-overall <- plot_grid(cluster_malaria_plots, rhs, rel_widths = c(2, 1))
 
 #############################################################
 
