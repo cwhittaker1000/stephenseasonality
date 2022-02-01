@@ -205,8 +205,7 @@ importance_upsample_plot <- ggplot(importance_upsample, aes(x = reorder(Variable
 rf_plot <- cowplot::plot_grid(AUC_upsample_plot, importance_upsample_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
 figure3 <- cowplot::plot_grid(urban_rural_ts, rf_plot, nrow = 2, ncol = 1, rel_heights = c(1, 1.1), align = "v", axis = "br")
 figure3
-ggsave(filename = here("figures/Figure_3_Overall.pdf"), 
-       plot = figure3, width = 12, height = 8)
+ggsave(filename = here("figures/Figure_3_Overall.pdf"), plot = figure3, width = 12, height = 8)
 
 
 #################

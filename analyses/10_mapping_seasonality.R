@@ -191,7 +191,7 @@ hoa_neighbours <- rbind(ken_shp, egy_shp, uga_shp, drc_shp, ssd_shp, car_shp, ua
 
 # lat and lon are wrong way round currently
 raster_plot <- as.data.frame(as(combined_raster, "SpatialPixelsDataFrame"))
-ggplot() +
+fig5 <- ggplot() +
   geom_tile(data = raster_plot, aes(x = x, y = y, fill = layer)) +
   scale_fill_gradient2(low = muted("red"), mid = "white", high = muted("blue"),
                        midpoint = 0.5, limits = c(0, 1), space = "Lab",
@@ -210,3 +210,5 @@ ggplot() +
         legend.text = element_text(size = 11),
         legend.title = element_text(size = 13, face = "bold")) +
   guides(fill = guide_colourbar(title = "Prob.Single\nSeasonal Peak", ticks = FALSE))
+
+ggsave(filename = here("figures/Figure_5.pdf"), plot = fig5, width = 8, height = 8)

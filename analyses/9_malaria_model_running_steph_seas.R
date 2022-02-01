@@ -216,7 +216,7 @@ mean_cluster_seasonalities <- c(round(mean(seasonality[which(cluster_membership 
 cols <- c("#E0521A", "#3F88C5", "#44BBA4", "#393E41")
 cluster_summary <- rbind(one_summary, two_summary, three_summary, four_summary)
 malaria_plots <- ggplot(data = cluster_summary, aes(fill = factor(id))) +
-  geom_ribbon(aes(x = t, ymin = inc_lower, ymax = inc_upper), 
+  geom_ribbon(aes(x = t, ymin = 10000 * inc_lower, ymax = 10000 * inc_upper), 
               alpha = 0.2) +
   facet_wrap(~id, nrow = 4) +
   lims(x = c(0, 10000)) +
@@ -269,7 +269,7 @@ cluster_seas_meandf <- data.frame(id = c(1, 2, 3, 4),
                                                   mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == 3]),
                                                   mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == 4])))
 cluster_malaria_plots <- malaria_plots + 
-  geom_label(data = cluster_seas_meandf, x = 8200, y = 0.0015, 
+  geom_label(data = cluster_seas_meandf, x = 8200, y = 10000 * 0.0014, 
              label = paste0("Mean Seasonality = ", mean_cluster_seasonalities),
              fill = "white", label.size = NA) +
   inset_element(test1, 0.05, 0.84, 0.22, 0.99) +
@@ -304,9 +304,9 @@ mean_max_incidence <- data.frame(id = factor(c(1, 2, 3, 4)),
                                               max(max_incidence$max_inc[which(cluster_membership == 2)]),
                                               max(max_incidence$max_inc[which(cluster_membership == 3)]),
                                               max(max_incidence$max_inc[which(cluster_membership == 4)])))
-seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = max_inc, fill = id)) +
+seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = 10000 * max_inc, fill = id)) +
   geom_bar(stat = "identity") +
-  geom_errorbar(aes(ymin = low_inc, ymax = high_inc), width = 0.5) +
+  geom_errorbar(aes(ymin = 10000 * low_inc, ymax = 10000 * high_inc), width = 0.5) +
   scale_fill_manual(values = cols) +
   scale_x_discrete(labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")) +
   scale_y_continuous(position = "right") +
@@ -316,6 +316,7 @@ seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = max_inc,
 
 rhs <- plot_grid(seasonality_timing, seasonality_max_incidence, nrow = 2, align = "v", axis = "b")
 overall_plot <- plot_grid(cluster_malaria_plots, rhs, rel_widths = c(2, 1))
+ggsave(filename = here("figures/Figure_4_Clusters.pdf"), plot = overall_plot, width = 12, height = 8)
 
 
 ####### URBAN RURAL FIGURE EXAMPLE ####### 
@@ -382,7 +383,7 @@ mean_cluster_seasonalities <- c(round(mean(seasonality[which(urban_rural == "Urb
 cols <- c("#447604", "#6EA65D","#807A85")
 rur_urb_summary <- rbind(urban_summary, rural1_summary, rural2_summary)
 malaria_plots <- ggplot(data = rur_urb_summary, aes(fill = factor(id))) +
-  geom_ribbon(aes(x = t, ymin = inc_lower, ymax = inc_upper), 
+  geom_ribbon(aes(x = t, ymin = 10000 * inc_lower, ymax = 10000 * inc_upper), 
               alpha = 0.2) +
   #geom_line(aes(x = t, y = inc_mean, col = factor(id))) +
   facet_wrap(~id, nrow = 3) +
@@ -430,7 +431,7 @@ cluster_seas_meandf <- data.frame(id = c("Urban", "Rural One Peak", "Rural Two P
                                                   mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == "Rural" & features_df$peaks == 1]),
                                                   mean(cluster_seas_plotdf$seasonality[cluster_seas_plotdf$id == "Rural" & features_df$peaks == 2])))
 cluster_malaria_plots <- malaria_plots + 
-  geom_label(data = cluster_seas_meandf, x = 8200, y = 0.0015, 
+  geom_label(data = cluster_seas_meandf, x = 8200, y = 10000 * 0.0014, 
              label = paste0("Mean Seasonality = ", mean_cluster_seasonalities),
              fill = "white", label.size = NA) +
   inset_element(test2, 0.05, 0.82, 0.22, 0.97) +
@@ -467,9 +468,9 @@ mean_max_incidence <- data.frame(id = factor(c("Urban", "Rural One Peak", "Rural
                                  high_inc = c(max(max_incidence$max_inc[which(urban_rural == "Urban")]),
                                               max(max_incidence$max_inc[which(urban_rural == "Rural" & features_df$peaks == 1)]),
                                               max(max_incidence$max_inc[which(urban_rural == "Rural" & features_df$peaks == 2)])))
-seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = max_inc, fill = id)) +
+seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = max_inc * 10000, fill = id)) +
   geom_bar(stat = "identity") +
-  geom_errorbar(aes(ymin = low_inc, ymax = high_inc), width = 0.5) +
+  geom_errorbar(aes(ymin = low_inc * 10000, ymax = high_inc * 10000), width = 0.5) +
   scale_fill_manual(values = cols) +
   scale_x_discrete(labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")) +
   scale_y_continuous(position = "right") +
@@ -478,8 +479,8 @@ seasonality_max_incidence <- ggplot(mean_max_incidence, aes(x = id, y = max_inc,
   theme(legend.position = "none") 
 
 rhs <- plot_grid(seasonality_timing, seasonality_max_incidence, nrow = 2, align = "v", axis = "b")
-overall <- plot_grid(cluster_malaria_plots, rhs, rel_widths = c(2, 1))
-
+overall_plot <- plot_grid(cluster_malaria_plots, rhs, rel_widths = c(2, 1))
+ggsave(filename = here("figures/Figure_4_UrbanRural.pdf"), plot = overall_plot, width = 12, height = 8)
 
 ########################
 
