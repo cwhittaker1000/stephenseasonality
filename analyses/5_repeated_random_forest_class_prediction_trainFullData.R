@@ -274,42 +274,96 @@ saveRDS(iterations_ups, file = paste0(here("outputs", "random_forest_outputs", "
 
 
 
-x <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData.rds"))
-final_random_forest_fit_ups <- x$model[[2]]
-explainer_ups <- explain_tidymodels(
-  model = final_random_forest_fit_ups,
-  data = dplyr::select(juiced_ups, -peaks),
-  y = as.numeric(juiced_ups$peaks),
-  verbose = FALSE)
-rem_ups <- which(colnames(explainer_ups$dat) == "country_peaks")
-pdp_ups <- model_profile(explainer_ups, variables = colnames(explainer_ups$data)[-rem_ups], N = NULL)
-plot(pdp_ups)
+ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds"))
+ups_vip_results <- tibble(id = 1, var = "bloop", x = 1, y = 1)
+for (i in 1:dim(ups)[1]) {
+  final_random_forest_fit_ups <- ups$model[[i]]
+  explainer_ups <- explain_tidymodels(
+    model = final_random_forest_fit_ups,
+    data = dplyr::select(juiced_ups, -peaks),
+    y = as.numeric(juiced_ups$peaks),
+    verbose = FALSE)
+  rem_ups <- which(colnames(explainer_ups$dat) == "country_peaks")
+  pdp_ups <- model_profile(explainer_ups, variables = colnames(explainer_ups$data)[-rem_ups], N = NULL)
+  prof_ups <- pdp_ups$agr_profiles
+  df_ups <- data.frame(id = i, var = prof_ups$`_vname_`, x = prof_ups$`_x_`, y = prof_ups$`_yhat_`)
+  ups_vip_results <- rbind(ups_vip_results, df_ups)
+  print(i)
+}
+ups_vip_results <- ups_vip_results[-1, ] 
+ups_summary_vip_results <- ups_vip_results %>%
+  group_by(var, x) %>%
+  summarise(mean = mean(y),
+            lower = min(y),
+            upper = max(y))
+ups_profile_plots <- ggplot(ups_summary_vip_results, aes(x = x, y = mean, col = var)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = var), alpha = 0.2, col = NA) +
+  facet_wrap(~var, scale = "free_x") +
+  theme(legend.position = "none") +
+  labs(x = "Covariate Value", y = "Average Prediction")
+ggsave(filename = here("figures/Supp_Figure_Upsample_Covariate_Profiling.pdf"), plot = ups_profile_plots, width = 8, height = 8)
 
-?plot.profile.nls
+no_ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData.rds"))
+no_ups_vip_results <- tibble(id = 1, var = "bloop", x = 1, y = 1)
+for (i in 1:dim(no_ups)[1]) {
+  final_random_forest_fit <- no_ups$model[[i]]
+  explainer <- explain_tidymodels(
+    model = final_random_forest_fit,
+    data = dplyr::select(juiced, -peaks),
+    y = as.numeric(juiced$peaks),
+    verbose = FALSE)
+  rem <- which(colnames(explainer$dat) == "country_peaks")
+  pdp <- model_profile(explainer, variables = colnames(explainer$data)[-rem], N = NULL)
+  prof <- pdp$agr_profiles
+  df <- data.frame(id = i, var = prof$`_vname_`, x = prof$`_x_`, y = prof$`_yhat_`)
+  no_ups_vip_results <- rbind(no_ups_vip_results, df)
+  print(i)
+}
+no_ups_vip_results <- no_ups_vip_results[-1, ] 
+no_ups_summary_vip_results <- no_ups_vip_results %>%
+  group_by(var, x) %>%
+  summarise(mean = mean(y),
+            lower = min(y),
+            upper = max(y))
+no_ups_profile_plots <- ggplot(no_ups_summary_vip_results, aes(x = x, y = mean, col = var)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = var), alpha = 0.2, col = NA) +
+  facet_wrap(~var, scale = "free_x") +
+  theme(legend.position = "none") +
+  labs(x = "Covariate Value", y = "Average Prediction")
+ggsave(filename = here("figures/Supp_Figure_NoUpsample_Covariate_Profiling.pdf"), plot = no_ups_profile_plots, width = 8, height = 8)
 
-
-x <- bind_rows(iterations$importance) %>%
-  group_by(Variable) %>%
-  summarise(mean = mean(Importance),
-            sd = sd(Importance),
-            se = sd(Importance)/sqrt(n()))
-x[rev(order(x$mean)), ]
-
-x <- bind_rows(iterations_ups$importance) %>%
-  group_by(Variable) %>%
-  summarise(mean = mean(Importance),
-            sd = sd(Importance),
-            se = sd(Importance)/sqrt(n()))
-x[rev(order(x$mean)), ]
-
-
-x <- bind_rows(iterations_ups$importance, iterations$importance) %>%
-  pivot_wider(names_from = sampling, values_from = Importance) %>%
-  group_by(Variable) %>%
-  summarise(mean_ups = mean(upsampling), 
-            mean_no = mean(no_upsampling))
-
-
-x <- bind_rows(iterations_ups$importance, iterations$importance) 
-ggplot(x, aes(x= Variable, fill = sampling, y = Importance)) +
-  geom_boxplot()
+# ups_profile_plots
+# no_ups_profile_plots
+# 
+# no_ups_summary_vip_results$data <- "noUps"
+# ups_summary_vip_results$data <- "Ups"
+# overall <- rbind(no_ups_summary_vip_results, ups_summary_vip_results)
+# ggplot(overall, aes(x = x, y = mean, col = data)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = data), alpha = 0.2, col = NA) +
+#   facet_wrap(~var, scale = "free_x") +
+#   theme(legend.position = "none") +
+#   labs(x = "Covariate Value", y = "Average Prediction")
+# 
+# x <- bind_rows(iterations$importance) %>%
+#   group_by(Variable) %>%
+#   summarise(mean = mean(Importance),
+#             sd = sd(Importance),
+#             se = sd(Importance)/sqrt(n()))
+# x[rev(order(x$mean)), ]
+# x <- bind_rows(iterations_ups$importance) %>%
+#   group_by(Variable) %>%
+#   summarise(mean = mean(Importance),
+#             sd = sd(Importance),
+#             se = sd(Importance)/sqrt(n()))
+# x[rev(order(x$mean)), ]
+# x <- bind_rows(iterations_ups$importance, iterations$importance) %>%
+#   pivot_wider(names_from = sampling, values_from = Importance) %>%
+#   group_by(Variable) %>%
+#   summarise(mean_ups = mean(upsampling), 
+#             mean_no = mean(no_upsampling))
+# x <- bind_rows(iterations_ups$importance, iterations$importance) 
+# ggplot(x, aes(x= Variable, fill = sampling, y = Importance)) +
+#   geom_boxplot()
