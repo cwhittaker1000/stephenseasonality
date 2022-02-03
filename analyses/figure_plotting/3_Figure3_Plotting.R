@@ -254,6 +254,115 @@ ggsave(filename = here("figures/Supp_Figure_AUC_VIP_NoUps.pdf"), plot = noUps_Su
 
 ############################################################################
 
+rf_no_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_NoUpsampling_SubsetData.rds"))
+rf_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_SubsetData.rds"))
+for (i in 1:length(rf_no_ups_subset$test_roc_curve)) {
+  temp <- rf_no_ups_subset$test_roc_curve[[i]]
+  temp_ups <- rf_ups_subset$test_roc_curve[[i]]
+  if (i == 1) {
+    df <- temp
+    df$iteration <- 1
+    df_ups <- temp_ups
+    df_ups$iteration <- 1
+  } else {
+    temp$iteration <- i
+    df <- rbind(df, temp)
+    temp_ups$iteration <- i
+    df_ups <- rbind(df_ups, temp_ups)
+  }
+}
+
+###
+no_ups_subset_AUC <- ggplot(df, aes(x = 1-specificity, y = sensitivity, id = factor(iteration))) +
+  geom_path(alpha = 0.5) +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
+  xlab("1 - Specificity") +
+  ylab("Sensitivity") +
+  theme_bw() +
+  theme(legend.position = "none") +
+  annotate("label", x = 0.67, y = 0.07,
+           label = paste0("Mean AUC = ", round(mean(rf_no_ups_subset$test_roc_auc), 2)),
+           label.padding = unit(0.35, "lines"), label.r = unit(0, "lines"),
+           label.size = unit(0.35, "lines"), size = 4)
+
+no_ups_df <- bind_rows(rf_no_ups_subset$importance)
+no_ups_df$data <- "subset_data"
+imp <- no_ups_df %>%
+  group_by(Variable) %>%
+  summarise(mean_Importance = mean(Importance),
+            stdev_Importance = sd(Importance),
+            stder_Importance = sd(Importance)/sqrt(n()),
+            num_times_inc = n())
+imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
+var_names <- imp$Variable[order(imp$mean_Importance)]
+new_names <- c("LC180", "Study\nfrom\nIndia", "LC12", "LC150", 
+               "LC11", "Study\nfrom\nIran", "LC100", "LC130", "Temp.\nSeasonality", 
+               "LC122", "Rain\nColdest\nQuarter", "LC110", "Rain.\nDriest\nMonth", "LC120",
+               "Rain.\nSeasonality", "LC200", "LC20", "Rain.\nWarmest\nQuarter",
+               "Mean\nTemp.\nWettest\nQuarter", "LC201", "Rain.\nDriest\nQuarter", 
+               "LC40", "LC30", "Population\nPer\nSquare Km", "LC10")
+importance_noUps_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
+                                         fill = mean_Importance)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
+                    ymax = mean_Importance + 1.96 * stdev_Importance),
+                width = 0.5) +
+  scale_x_discrete(labels = new_names) +
+  scale_fill_continuous(low = "grey", high = "#E14545") +
+  xlab("") + ylab("Variable Importance") +
+  lims(y = c(0, 0.06)) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(size = 7))
+
+noUps_Supp_Plot_SubsetData <- cowplot::plot_grid(no_ups_subset_AUC, importance_noUps_SubsetData_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
+
+###
+ups_subset_AUC <- ggplot(df_ups, aes(x = 1-specificity, y = sensitivity, id = factor(iteration))) +
+  geom_path(alpha = 0.5) +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
+  xlab("1 - Specificity") +
+  ylab("Sensitivity") +
+  theme_bw() +
+  theme(legend.position = "none") +
+  annotate("label", x = 0.67, y = 0.07,
+           label = paste0("Mean AUC = ", round(mean(rf_ups_subset$test_roc_auc), 2)),
+           label.padding = unit(0.35, "lines"), label.r = unit(0, "lines"),
+           label.size = unit(0.35, "lines"), size = 4)
+
+ups_df <- bind_rows(rf_ups_subset$importance)
+ups_df$data <- "subset_data"
+imp <- ups_df %>%
+  group_by(Variable) %>%
+  summarise(mean_Importance = mean(Importance),
+            stdev_Importance = sd(Importance),
+            stder_Importance = sd(Importance)/sqrt(n()),
+            num_times_inc = n())
+imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
+var_names <- imp$Variable[order(imp$mean_Importance)]
+new_names <- c("LC130", "LC100", "LC180", "LC12", "Study\nfrom\nIndia", 
+               "LC150", "Rain\nColdest\nQuarter", "LC11", "Rain.\nSeasonality",
+               "LC122", "LC20", "Mean\nTemp.\nWettest\nQuarter", "LC120", "LC40", "LC30",
+               "LC110", "Temp.\nSeasonality", "Study\nfrom\nIran", "Population\nPer\nSquare Km",
+               "LC200", "LC10", "Rain.\nDriest\nQuarter", "Rain.\nDriest\nMonth", 
+               "Rain.\nWarmest\nQuarter", "LC201")
+importance_Ups_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
+                                                    fill = mean_Importance)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
+                    ymax = mean_Importance + 1.96 * stdev_Importance),
+                width = 0.5) +
+  scale_x_discrete(labels = new_names) +
+  scale_fill_continuous(low = "grey", high = "#E14545") +
+  xlab("") + ylab("Variable Importance") +
+  lims(y = c(0, 0.19)) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(size = 7))
+
+Ups_Supp_Plot_SubsetData <- cowplot::plot_grid(ups_subset_AUC, importance_Ups_SubsetData_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
+cowplot::plot_grid(noUps_Supp_Plot_SubsetData, Ups_Supp_Plot_SubsetData, nrow  = 2)
+
 
 ## Rural/urban associations with cluster membership
 tab <- table(cluster_membership, urban_rural)

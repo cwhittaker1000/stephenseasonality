@@ -69,7 +69,7 @@ seeds <- c(345, 234, 284, 102391, 19, 2948457, 294894, 189, 38484902, 284651, 83
            10, 19, 19029, 8726, 23716, 17278, 92883, 827, 7162, 162, 1282, 8172, 128, 91, 981,
            456, 224, 8743, 362, 81, 9223, 753, 357, 99, 101)
 number_iterations <- 25
-for (i in 2:number_iterations) {
+for (i in 1:number_iterations) {
   
   # Set Seed
   set.seed(seeds[i])
@@ -93,7 +93,7 @@ for (i in 2:number_iterations) {
   juiced <- juice(envt_prepped)
   new_envt_recipe <- recipe(peaks ~ ., data = juiced) %>% # have to do this way to ensure recipe isn't applied *within* tune-grid
     update_role(country_peaks, new_role = "ID")           # when we do this, recipe is applied within each fold, and diff covariates are removed for each
-  
+
   # Prepping Data - Selecting Variables, Creating Recipe - Upsampling to Balance Amount of Data for 1 and 2 Peaks
   set.seed(seed)
   envt_recipe_ups <- recipe(peaks  ~ ., data = rf_train) %>%

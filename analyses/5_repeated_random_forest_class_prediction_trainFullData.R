@@ -272,6 +272,22 @@ for (i in 1:number_iterations) {
 saveRDS(iterations, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData.rds")))
 saveRDS(iterations_ups, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds")))
 
+
+
+x <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData.rds"))
+final_random_forest_fit_ups <- x$model[[2]]
+explainer_ups <- explain_tidymodels(
+  model = final_random_forest_fit_ups,
+  data = dplyr::select(juiced_ups, -peaks),
+  y = as.numeric(juiced_ups$peaks),
+  verbose = FALSE)
+rem_ups <- which(colnames(explainer_ups$dat) == "country_peaks")
+pdp_ups <- model_profile(explainer_ups, variables = colnames(explainer_ups$data)[-rem_ups], N = NULL)
+plot(pdp_ups)
+
+?plot.profile.nls
+
+
 x <- bind_rows(iterations$importance) %>%
   group_by(Variable) %>%
   summarise(mean = mean(Importance),

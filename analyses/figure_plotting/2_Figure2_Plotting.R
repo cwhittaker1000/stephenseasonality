@@ -88,64 +88,12 @@ for (i in 1:length(overall$id)) {
 }
 norm_rainfall_storage <- normalise_total(rainfall_storage)
 
+# Plotting Figure 2 and the Clusters
+pdf("Figures/Figure_2_Overall.pdf", height = 6.5, width = 10.5, useDingbats = FALSE)
 palette(c("#E0521A", "#3F88C5", "#44BBA4", "#393E41"))
-par(mfrow = c(2, 2), mar = c(0.5, 0.5, 0.5, 0.5), oma = c(5, 1, 1, 5))
 max <- 12
 months <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 lty <- 3
-
-for (i in 1:num_clust) {
-  if (i == 1) {
-    cluster <- normalised_output[clusters == i, ]
-    number_time_series <- dim(cluster)[1]
-    plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", yaxt = "n", ylim = c(0, max), lwd = 5, col = palette()[i], las = 1, xaxt = "n")
-    for (j in 1:length(cluster[, 1])) {
-      lines(timepoints, cluster[j, ] * 100, col = adjustcolor(palette()[i], alpha.f = 0.2))
-    }
-    text(0, max-0.5, paste0("Cluster 1 (n = ", number_time_series, ")"), cex = 1.2, col = "grey20", adj = 0, font = 2)
-    mean_rainfall <- apply(norm_rainfall_storage[clusters == i, ], 2, mean)
-    lines(timepoints[-length(timepoints)], mean_rainfall * 100, type = "l", col = "black", lwd = 1, lty = lty)
-  }
-  else if (i == 2) {
-    cluster <- normalised_output[clusters == i, ]
-    number_time_series <- dim(cluster)[1]
-    plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", yaxt = "n", ylim = c(0, max), lwd = 5, col = palette()[i], las = 1, xaxt = "n")
-    axis(4, at = seq(0, 12, 2), las = 2)
-    for (j in 1:length(cluster[, 1])) {
-      lines(timepoints, cluster[j, ] * 100, col = adjustcolor(palette()[i], alpha.f = 0.2))
-      
-    }
-    text(0, max-0.5, paste0("Cluster 2 (n = ", number_time_series, ")"), cex = 1.2, col = "grey20", adj = 0, font = 2)
-    mean_rainfall <- apply(norm_rainfall_storage[clusters == i, ], 2, mean)
-    lines(timepoints[-length(timepoints)], mean_rainfall * 100, type = "l", col = "black", lwd = 1, lty = lty)
-  } else if (i == 3) {
-    cluster <- normalised_output[clusters == i, ]
-    number_time_series <- dim(cluster)[1]
-    plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", yaxt = "n", ylim = c(0, max), lwd = 5, col = palette()[i], las = 1, xaxt = "n")
-    axis(1, at = seq(0, 11, 1), labels = months, las = 2)
-    for (j in 1:length(cluster[, 1])) {
-      lines(timepoints, cluster[j, ] * 100, col = adjustcolor(palette()[i], alpha.f = 0.2))
-    }
-    text(0, max-0.5, paste0("Cluster 3 (n = ", number_time_series, ")"), cex = 1.2, col = "grey20", adj = 0, font = 2)
-    mean_rainfall <- apply(norm_rainfall_storage[clusters == i, ], 2, mean)
-    lines(timepoints[-length(timepoints)], mean_rainfall * 100, type = "l", col = "black", lwd = 1, lty = lty)
-  } else {
-    cluster <- normalised_output[clusters == i, ]
-    number_time_series <- dim(cluster)[1]
-    plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", yaxt = "n", ylim = c(0, max), lwd = 5, col = palette()[i], las = 1, xaxt = "n")
-    axis(4, at = seq(0, 12, 2), las = 2)
-    axis(1, at = seq(0, 11, 1), labels = months, las = 2)
-    for (j in 1:length(cluster[, 1])) {
-      lines(timepoints, cluster[j, ] * 100, col = adjustcolor(palette()[i], alpha.f = 0.2))
-    }
-    text(0, max-0.5, paste0("Cluster 4 (n = ", number_time_series, ")"), cex = 1.2, col = "grey20", adj = 0, font = 2)
-    mean_rainfall <- apply(norm_rainfall_storage[clusters == i, ], 2, mean)
-    lines(timepoints[-length(timepoints)], mean_rainfall * 100, type = "l", col = "black", lwd = 1, lty = lty)
-  }
-  mtext("Normalised Catch (% of Annual Total)", side = 4, outer = TRUE, cex = 1, font = 2, line = 3, col = "grey20")
-}
-
-pdf("Figures/Figure_2_Overall.pdf", height = 6.5, width = 10.5, useDingbats = FALSE)
 layout.matrix <- matrix(c(1, 2, 5, 3, 4, 6), nrow = 2, ncol = 3, byrow = TRUE)
 layout(mat = layout.matrix)
 par(mar = c(0.5, 0.5, 0.5, 0.5), oma = c(3, 5, 1, 1))
@@ -232,6 +180,46 @@ stripchart(percent_incidence_out ~ clusters, method = "jitter", jitter = 0.25,
            pch = 20, cex = 1.5, col = palette()[1:4], vertical = TRUE, add = TRUE)
 dev.off()
 
+# Visualising the properties of each cluster
+pdf("Figures/Supp_Figure_Cluster_Properties.pdf", height = 8, width = 10, useDingbats = FALSE)
+number_properties <- ncol(normalised_features)
+property_names <- colnames(normalised_features)
+par(mfrow = c(num_clust, number_properties + 1), mar = c(3.5, 2, 2, 1), oma = c(1, 2.5, 5, 1))
+max <- 12
+mean_operation_values <- matrix(nrow = num_clust, ncol = number_properties)
+colnames(mean_operation_values) <- c("Period", "Prop. Points\n1.6x Mean", "Dist\nfrom Jan",
+                                     "Number of\nPeaks", "Von Mises\nMean", "Von Mises\nWeight", "% Incidence\nIn 4 Months")
+for (i in 1:num_clust) {
+  if (i == 1) {
+    subsetter <- clusters == i
+    cluster_time_series <- normalised_output[subsetter, ]
+    cluster_time_series_properties <- normalised_features[subsetter, ]
+    plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[i], lwd = 2, ylab = "", xlab = "", las = 1)
+    mtext("Time (Months)", side = 1, outer = FALSE, cex = 0.75, font = 2, line = 2, col = "grey20")
+    mtext("Norm.Vector\nDensity", side = 2, outer = FALSE, cex = 0.75, font = 2, line = 2, col = "grey20")
+    for (j in 1:number_properties) {
+      hist(cluster_time_series_properties[, j], col = palette()[i], main = "", xlab = "", ylab = "", las = 1,
+           xlim = c(min(cluster_time_series_properties[, j]), max(cluster_time_series_properties[, j])))
+      mtext(colnames(mean_operation_values)[j], side = 3, outer = FALSE, cex = 1, font = 2, line = 1, col = "grey20")
+    }
+    mean_operation_values[i, ] <- apply(cluster_time_series_properties, 2, mean)
+  } else {
+    subsetter <- clusters == i
+    cluster_time_series <- normalised_output[subsetter, ]
+    cluster_time_series_properties <- normalised_features[subsetter, ]
+    plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[i], lwd = 2, ylab = "", xlab = "", las = 1)
+    mtext("Time (Months)", side = 1, outer = FALSE, cex = 0.75, font = 2, line = 2, col = "grey20")
+    mtext("Norm.Vector\nDensity", side = 2, outer = FALSE, cex = 0.75, font = 2, line = 2, col = "grey20")
+    for (j in 1:number_properties) {
+      hist(cluster_time_series_properties[, j], col = palette()[i], main = "", xlab = "", ylab = "", las = 1,
+           xlim = c(min(cluster_time_series_properties[, j]), max(cluster_time_series_properties[, j])))
+    }
+    mean_operation_values[i, ] <- apply(cluster_time_series_properties, 2, mean)
+  }
+}
+
+dev.off()
+
 mean(features$peaks[urban_rural == "Urban"]) # almost all urban time series are unimodal
 mean(features$peaks[urban_rural == "Rural"]) # mixture of unimodal and bimodal time series for rural
 
@@ -278,3 +266,54 @@ mean(features$jan_dist[cluster_output$cluster == 4])
 # mean(ccf_1[clusters == 2])
 # mean(ccf_1[clusters == 3])
 # mean(ccf_1[clusters == 4])
+
+# for (i in 1:num_clust) {
+#   if (i == 1) {
+#     cluster <- normalised_output[clusters == i, ]
+#     number_time_series <- dim(cluster)[1]
+#     plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", yaxt = "n", ylim = c(0, max), lwd = 5, col = palette()[i], las = 1, xaxt = "n")
+#     for (j in 1:length(cluster[, 1])) {
+#       lines(timepoints, cluster[j, ] * 100, col = adjustcolor(palette()[i], alpha.f = 0.2))
+#     }
+#     text(0, max-0.5, paste0("Cluster 1 (n = ", number_time_series, ")"), cex = 1.2, col = "grey20", adj = 0, font = 2)
+#     mean_rainfall <- apply(norm_rainfall_storage[clusters == i, ], 2, mean)
+#     lines(timepoints[-length(timepoints)], mean_rainfall * 100, type = "l", col = "black", lwd = 1, lty = lty)
+#   }
+#   else if (i == 2) {
+#     cluster <- normalised_output[clusters == i, ]
+#     number_time_series <- dim(cluster)[1]
+#     plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", yaxt = "n", ylim = c(0, max), lwd = 5, col = palette()[i], las = 1, xaxt = "n")
+#     axis(4, at = seq(0, 12, 2), las = 2)
+#     for (j in 1:length(cluster[, 1])) {
+#       lines(timepoints, cluster[j, ] * 100, col = adjustcolor(palette()[i], alpha.f = 0.2))
+#       
+#     }
+#     text(0, max-0.5, paste0("Cluster 2 (n = ", number_time_series, ")"), cex = 1.2, col = "grey20", adj = 0, font = 2)
+#     mean_rainfall <- apply(norm_rainfall_storage[clusters == i, ], 2, mean)
+#     lines(timepoints[-length(timepoints)], mean_rainfall * 100, type = "l", col = "black", lwd = 1, lty = lty)
+#   } else if (i == 3) {
+#     cluster <- normalised_output[clusters == i, ]
+#     number_time_series <- dim(cluster)[1]
+#     plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", yaxt = "n", ylim = c(0, max), lwd = 5, col = palette()[i], las = 1, xaxt = "n")
+#     axis(1, at = seq(0, 11, 1), labels = months, las = 2)
+#     for (j in 1:length(cluster[, 1])) {
+#       lines(timepoints, cluster[j, ] * 100, col = adjustcolor(palette()[i], alpha.f = 0.2))
+#     }
+#     text(0, max-0.5, paste0("Cluster 3 (n = ", number_time_series, ")"), cex = 1.2, col = "grey20", adj = 0, font = 2)
+#     mean_rainfall <- apply(norm_rainfall_storage[clusters == i, ], 2, mean)
+#     lines(timepoints[-length(timepoints)], mean_rainfall * 100, type = "l", col = "black", lwd = 1, lty = lty)
+#   } else {
+#     cluster <- normalised_output[clusters == i, ]
+#     number_time_series <- dim(cluster)[1]
+#     plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", yaxt = "n", ylim = c(0, max), lwd = 5, col = palette()[i], las = 1, xaxt = "n")
+#     axis(4, at = seq(0, 12, 2), las = 2)
+#     axis(1, at = seq(0, 11, 1), labels = months, las = 2)
+#     for (j in 1:length(cluster[, 1])) {
+#       lines(timepoints, cluster[j, ] * 100, col = adjustcolor(palette()[i], alpha.f = 0.2))
+#     }
+#     text(0, max-0.5, paste0("Cluster 4 (n = ", number_time_series, ")"), cex = 1.2, col = "grey20", adj = 0, font = 2)
+#     mean_rainfall <- apply(norm_rainfall_storage[clusters == i, ], 2, mean)
+#     lines(timepoints[-length(timepoints)], mean_rainfall * 100, type = "l", col = "black", lwd = 1, lty = lty)
+#   }
+#   mtext("Normalised Catch (% of Annual Total)", side = 4, outer = TRUE, cex = 1, font = 2, line = 3, col = "grey20")
+# }
