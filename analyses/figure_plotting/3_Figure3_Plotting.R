@@ -210,81 +210,47 @@ ggsave(filename = here("figures/Figure_3_Overall.pdf"), plot = figure3, width = 
 
 #################
 
-a_plot <- ggplot(df, aes(x = 1-specificity, y = sensitivity, col = factor(iteration))) +
-  geom_path() +
+no_ups_AUC <- ggplot(df, aes(x = 1-specificity, y = sensitivity, id = factor(iteration))) +
+  geom_path(alpha = 0.5) +
   geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
   xlab("1 - Specificity") +
   ylab("Sensitivity") +
+  theme_bw() +
   theme(legend.position = "none") +
-  annotate("label", x = 0.20, y = 0.97,
+  annotate("label", x = 0.67, y = 0.07,
            label = paste0("Mean AUC = ", round(mean(rf_no_ups_full$test_roc_auc), 2)),
            label.padding = unit(0.35, "lines"), label.r = unit(0, "lines"),
-           label.size = unit(0.35, "lines"), size = 5)
-b <- bind_rows(rf_no_ups_full$importance)
-b$data <- "full_data"
-imp <- b %>%
+           label.size = unit(0.35, "lines"), size = 4)
+no_ups_df <- bind_rows(rf_no_ups_full$importance)
+no_ups_df$data <- "full_data"
+imp <- no_ups_df %>%
   group_by(Variable) %>%
   summarise(mean_Importance = mean(Importance),
             stdev_Importance = sd(Importance),
             stder_Importance = sd(Importance)/sqrt(n()))
 imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
 var_names <- imp$Variable[order(imp$mean_Importance)]
-new_names <- c("Study\nfrom\nIndia", "LC 180", "LC 150", "LC 11", 
-               "Study\nfrom\nIran", "Temperature\nSeasonality", "LC 130", "LC 110",
-               "LC 122", "LC 120", "Rainfall\nColdest\nQuarter", "Rainfall\nSeasonality",
-               "LC 20", "LC 30", "Population\nPer\nSquare Km", "LC 10")
-b_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
+new_names <- c("Study\nfrom\nIndia", "LC180", "LC150", "LC11", 
+               "Study\nfrom\nIran", "Temp.\nSeasonality", "LC130", "LC110",
+               "LC122", "LC120", "Rain\nColdest\nQuarter", "Rain.\nSeasonality",
+               "LC20", "LC30", "Population\nPer\nSquare Km", "LC10")
+importance_noUps_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                           fill = mean_Importance)) +
   geom_bar(stat = "identity") +
   geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
-                    ymax = mean_Importance + 1.96 * stdev_Importance)) +
+                    ymax = mean_Importance + 1.96 * stdev_Importance),
+                width = 0.5) +
   scale_x_discrete(labels = new_names) +
+  scale_fill_continuous(low = "grey", high = "#E14545") +
   xlab("") + ylab("Variable Importance") +
-  lims(y = c(0, 0.036)) +
-  theme(legend.position = "none")
+  lims(y = c(0, 0.04)) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(size = 7))
 
-cowplot::plot_grid(a_plot, b_plot, rel_widths = c(1, 2), align = "h", axis = "b")
-
-
-
-
-cowplot::plot_grid(a_plot, b_plot, 
-                   a_plot_ups, b_plot_ups, nrow = 2, ncol =2,
-                   rel_widths = c(1, 2), align = "h", axis = "b")
-
-
-
-
-
-
-ggplot(overall_df, aes(x = timepoint, y = density, col = setting, group = id)) +
-  geom_path() +
-  facet_wrap(~setting, nrow = 1, scales = "free_y")
-
-
-
-
-b <- ggplot(summary_df, aes(x = timepoint, y = mean_dens , col = setting)) +
-  geom_path() +
-  geom_ribbon(aes(ymin = low_dens, ymax = high_dens, fill = setting), alpha = 0.2, colour = NA) +
-  scale_color_manual(values = c("#857C8D", "#447604", "#6CC551")) +
-  scale_fill_manual(values = c("#857C8D", "#447604", "#6CC551")) +
-  facet_wrap(~setting, nrow = 1) +
-  theme(legend.position = "none") +
-  theme(plot.margin = unit(c(-1, 0, 0, 0), "cm"))
-
-a <- cowplot::plot_grid(a_plot_ups, b_plot_ups, b, nrow = 2, ncol = 2,
-                        rel_widths = c(1, 2), align = "h", axis = "b")
-
-a <- cowplot::plot_grid(a_plot_ups, b_plot_ups, ncol = 2,
-                        rel_widths = c(1, 2), align = "h", axis = "b")
-
-cowplot::plot_grid(a, b, nrow = 2, ncol = 1, rel_heights = c(1.2, 1), align = "v", axis = "b")
-
-
-
-
-
+noUps_Supp_Plot <- cowplot::plot_grid(no_ups_AUC, importance_noUps_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
+noUps_Supp_Plot
+ggsave(filename = here("figures/Supp_Figure_AUC_VIP_NoUps.pdf"), plot = noUps_Supp_Plot, width = 12, height = 5)
 
 ############################################################################
 
