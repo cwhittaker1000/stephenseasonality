@@ -1,7 +1,7 @@
 # Loading required libraries
 library(data.table); library(devtools); library(ggplot2); library(tidyverse)
 library(lubridate); library(rgdal); library(rgeos); library(raster); library(viridis)
-library(ggpolypath); library(maptools); library(tidyverse); library(plyr); library(e1071)
+library(ggpolypath); library(maptools); library(tidyverse); library(e1071)
 library(odin); library(ggpubr); library(viridis); library(Hmisc); library(cowplot)
 library(ipred); library(ICDMM); #devtools::install_github("https://github.com/jhellewell14/ICDMM", dependencies = TRUE)
 library(scales); library(patchwork); library(here); library(zoo)
@@ -92,16 +92,6 @@ for (i in 1:length(overall$id)) {
 }
 normalised_output <- t(apply(mean_realisation, 1, normalise_total))
 
-# Generating the vector of how mosquito density changes over time 
-density_start <- 0.1
-density_end <- 10
-values <- sigmoid(seq(-10, 10, length.out = 365 * 4)) # How long you want introduction to last - here, 10 years
-density_vec <- c(rep(density_start, 365 * 1), 
-                 pmin((values * (density_end - density_start)) + density_start, density_end),
-                 rep(density_end, 365 * 23))
-dens_vec_df <- data.frame(vector_density = density_vec, time = seq(1:length(density_vec))/365)
-plot(dens_vec_df$vector_density)
-
 # Generating seasonal profiles based on actual stephensi data
 scaled_year_output <- t(apply(normalised_output, 1, function(x) {
   temp <- approx(x, n = 365)$y
@@ -115,66 +105,161 @@ for (i in 1:(dim(scaled_year_output)[1])) {
   steph_seasonality_list[[i]] <- scaled_year_output[i, ]
 }
 
+EIRs <- c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
 fresh_run <- FALSE
 if (fresh_run) {
-  multi_outputs <- sapply(1:(length(steph_seasonality_list)), function(x){
+  for (i in 1:length(EIRs)) {
     
-    set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality.R", # model file
-                                            #Model parameters to work out transmission
-                                            init_EIR = 0.000001, # initial EIR from which the endemic equilibria solution is created
-                                            #These are the mosquito parameters (bionomics)
-                                            Q0 = stephensi_data$Q0, 
-                                            chi = stephensi_data$chi, 
-                                            bites_Bed = stephensi_data$bites_Bed,
-                                            bites_Indoors = stephensi_data$bites_Indoors, 
-                                            #These are our seasonal variations
-                                            scalar = 1, #This is the scalar shown above in the plots - DOESN'T SEEM TO DO ANYTHING - ASK ARRAN!!!
-                                            #custom_seasonality = if(x == 1) loc_seasonality else NA,
-                                            custom_seasonality = steph_seasonality_list[[x]], # NA for perennial
-                                            #This sets up how long we want to run for and the density vec
-                                            time_length = length(density_vec),
-                                            density_vec = density_vec)
-    
-    #Process model formulation
-    set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
-    mod_run <- set_up_model$run(t = 1:length(density_vec))
-    out <- set_up_model$transform_variables(mod_run)
-    model_ran <- as.data.frame(out)
-    model_ran <- data.frame(id = x, model_ran)
+    # Generating the vector of how mosquito density changes over time 
+    density_start <- 0.1
+    density_end <- EIRs[i]
+    values <- sigmoid(seq(-10, 10, length.out = 365 * 4)) # How long you want introduction to last - here, 10 years
+    density_vec <- c(rep(density_start, 365 * 1), 
+                     pmin((values * (density_end - density_start)) + density_start, density_end),
+                     rep(density_end, 365 * 23))
 
-  }, simplify = FALSE)
-  
-  saveRDS(multi_outputs, file = "outputs/malaria_model_running_stephensi_profiles.rds")
-} else {
-  multi_outputs <- readRDS("outputs/malaria_model_running_stephensi_profiles.rds")
-}
-
-# Loading In Saved Runs and Combining Into Overall Data Frame
-for (i in 1:(length(steph_seasonality_list))) {
-  if (i == 1) {
-    temp <- multi_outputs[[i]][, c("id", "t", "prev", "Incidence", "mv")]
-  } else {
-    temp <- rbind(temp, multi_outputs[[i]][, c("id", "t", "prev", "Incidence", "mv")])
+    # Running the Model Across All the Seasonal Profiles for Stephensi
+    multi_outputs <- sapply(1:(length(steph_seasonality_list)), function(x){
+      
+      set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality.R", # model file
+                                              #Model parameters to work out transmission
+                                              init_EIR = 0.000001, # initial EIR from which the endemic equilibria solution is created
+                                              #These are the mosquito parameters (bionomics)
+                                              Q0 = stephensi_data$Q0, 
+                                              chi = stephensi_data$chi, 
+                                              bites_Bed = stephensi_data$bites_Bed,
+                                              bites_Indoors = stephensi_data$bites_Indoors, 
+                                              #These are our seasonal variations
+                                              scalar = 1, #This is the scalar shown above in the plots - DOESN'T SEEM TO DO ANYTHING - ASK ARRAN!!!
+                                              #custom_seasonality = if(x == 1) loc_seasonality else NA,
+                                              custom_seasonality = steph_seasonality_list[[x]], # NA for perennial
+                                              #This sets up how long we want to run for and the density vec
+                                              time_length = length(density_vec),
+                                              density_vec = density_vec)
+      
+      #Process model formulation
+      set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
+      mod_run <- set_up_model$run(t = 1:length(density_vec))
+      out <- set_up_model$transform_variables(mod_run)
+      model_ran <- as.data.frame(out)
+      model_ran <- data.frame(id = x, EIR = EIRs[i], model_ran)
+      
+    }, simplify = FALSE)
+    saveRDS(multi_outputs, file = paste0("outputs/malaria_model_running_stephensi_profiles_sensitivityEIR_", EIRs[i] , ".rds"))
   }
+  print(i)
 }
-temp$id <- as.factor(temp$id)
-#rm(multi_outputs)
+
+# Vector Density Scale Up Plot
+vector_density_df <- data.frame(t = 1:length(density_vec), vector_density = density_vec)
+vector_density_plot <- ggplot(vector_density_df, aes(x = t, y = vector_density/max(vector_density))) +
+  geom_line() +
+  lims(x = c(0, 2500)) +
+  theme_bw() +
+  labs(x = "Time (Days)", y = "% of Maximum Vector Density")
+ggsave(filename = here("figures/Supp_Figure_Vector_Density_Scale_Up.pdf"), plot = vector_density_plot, width = 7.5, height = 7.5)
+
+if (fresh_run) {
+  # Loading In Saved Runs and Combining Into Overall Data Frame
+  all_mod_results <- vector("list", length(EIRs))
+  for (i in 1:length(EIRs)) {
+    temp_overall <- readRDS(paste0("outputs/malaria_model_running_stephensi_profiles_sensitivityEIR_", EIRs[i], ".rds"))
+    for (j in 1:(length(steph_seasonality_list))) {
+      if (j == 1) {
+        EIR_mod_results <- temp_overall[[j]][, c("id", "t", "prev", "Incidence", "mv")]
+        EIR_mod_results$EIR <- EIRs[i]
+      } else {
+        temp <- temp_overall[[j]][, c("id", "t", "prev", "Incidence", "mv")]
+        temp$EIR <- EIRs[i]
+        EIR_mod_results <- rbind(EIR_mod_results, temp)
+      }
+    }
+    all_mod_results[[i]] <- EIR_mod_results
+    rm(temp_overall)
+    rm(EIR_mod_results)
+    print(i)
+  }
+  saveRDS(all_mod_results, file = "outputs/malaria_model_running_stephensi_profiles_sensitivity_results_subset.rds")
+} else {
+  all_mod_results <- readRDS("outputs/malaria_model_running_stephensi_profiles_sensitivity_results_subset.rds")
+}
+
+overall_model_results <- bind_rows(all_mod_results)
+overall_model_results$id <- as.factor(overall_model_results$id)
 
 # Calculating Aggregate Quantities E.g. Degree of Seasonality, Time to 2% Etc
-time_to_2_percent <- c()
-time_to_2_percent_yearly_average <- c()
+time_to_2_percent <- matrix(nrow = length(steph_seasonality_list), ncol = length(EIRs))
+time_to_2_percent_yearly_average <- matrix(nrow = length(steph_seasonality_list), ncol = length(EIRs))
+time_to_top_prev <- matrix(nrow = length(steph_seasonality_list), ncol = length(EIRs))
+top_prev <- matrix(nrow = length(steph_seasonality_list), ncol = length(EIRs))
+for (i in 1:length(EIRs)) {
+  EIR <- EIRs[i]
+  for (j in 1:(length(steph_seasonality_list))) {
+    temp_calc <- overall_model_results$prev[overall_model_results$id == j & overall_model_results$EIR == EIR]
+    above_2_percent <- which(temp_calc > 0.02)[1]/365
+    yearly_averages <- colMeans(matrix(temp_calc, nrow = 365))
+    yearly_average_above_2_percent <- which(yearly_averages > 0.02)[1]
+    
+    time_to_2_percent[j, i] <- above_2_percent
+    time_to_2_percent_yearly_average[j, i] <- yearly_average_above_2_percent
+    
+    top_prev_spec <- mean(temp_calc[9000:10000])
+    top_prev[j, i] <- top_prev_spec
+    time_to_top_prev[j, i] <- which(temp_calc > top_prev_spec)[1]/365
+    
+  }
+  print(i)
+}
+time_df <- data.frame(id = 1:65, time2percent = time_to_2_percent)
+time_df_top_prev <- data.frame(id = 1:65, timeTopPrev = time_to_top_prev)
+colnames(time_df) <- colnames(time_df_top_prev) <- c("id", paste0("EIR_", EIRs))
+
+time_df_top_prev <- time_df_top_prev %>%
+  pivot_longer(cols = -id, names_to = "EIR", values_to = "time_top_prev")
+min_time_top_prev_df <- time_df_top_prev %>%
+  mutate(EIR = factor(EIR)) %>%
+  dplyr::group_by(EIR) %>%
+  dplyr::summarise(min_time_top_prev = min(time_top_prev))
+time_df_top_prev <- time_df_top_prev %>%
+  left_join(min_time_top_prev_df, by = "EIR") %>%
+  mutate(rel_time_top_prev = time_top_prev/min_time_top_prev)
+
+time_df <- time_df %>%
+  pivot_longer(cols = -id, names_to = "EIR", values_to = "time")
+min_time_df <- time_df %>%
+  mutate(EIR = factor(EIR)) %>%
+  dplyr::group_by(EIR) %>%
+  dplyr::summarise(min_time = min(time))
+time_df <- time_df %>%
+  left_join(min_time_df, by = "EIR") %>%
+  mutate(rel_time = time/min_time)
+
+timing_df <- time_df %>%
+  left_join(time_df_top_prev, by = c("id", "EIR"))
+
 seasonality <- c()
 for (i in 1:(length(steph_seasonality_list))) {
-  temp_calc <- temp$prev[temp$id == i]
-  above_2_percent <- which(temp_calc > 0.02)[1]/365
-  yearly_averages <- colMeans(matrix(temp_calc, nrow = 365))
-  yearly_average_above_2_percent <- which(yearly_averages > 0.02)[1]
-  
-  time_to_2_percent <- c(time_to_2_percent, above_2_percent)
-  time_to_2_percent_yearly_average <- c(time_to_2_percent_yearly_average, yearly_average_above_2_percent)
-  
   seasonality <- c(seasonality, calc_incidence_seasonality(steph_seasonality_list[[i]], 3))
 }
+seasonality_df <- data.frame(id = 1:65, seasonality = seasonality)
+
+time_seasonal_df <- timing_df %>%
+  left_join(seasonality_df, by = "id")
+
+time_seasonal_df$EIR <- gsub("_", " ", time_seasonal_df$EIR)
+time_seasonal_df$EIR <- factor(time_seasonal_df$EIR, 
+                               levels = c("EIR 10", "EIR 20", "EIR 30", "EIR 40", "EIR 50",
+                                          "EIR 60", "EIR 70", "EIR 80", "EIR 90", "EIR 100"))
+ggplot(time_seasonal_df, aes(x = seasonality, y = time , col = EIR)) +
+  geom_smooth(aes(fill = EIR)) +
+  geom_point() +
+  theme_bw()
+EIR_sensitivity_plot <- ggplot(time_seasonal_df, aes(x = seasonality, y = rel_time, col = EIR)) +
+  geom_smooth(aes(fill = EIR)) +
+  geom_point() +
+  theme_bw() +
+  labs(x = "% Annual Catch In 3 Months", y = "Time to 2% Prevalence Relative to Perennial Dynamics")
+ggsave(filename = here("figures/Supp_Figure_EIR_Sensitivity.pdf"), plot = EIR_sensitivity_plot, width = 8.5, height = 7)
 
 
 ####### CLUSTER FIGURE EXAMPLE ####### 
