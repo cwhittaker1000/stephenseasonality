@@ -105,8 +105,6 @@ metadata <- raw_df[retain_index, ] %>%
 overall <- cbind(metadata, new_df[retain_index, ])
 colnames(overall)[8:19] <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 saveRDS(overall, file = here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
-table(metadata$country)  
-table(metadata$city)  
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -117,12 +115,10 @@ table(metadata$city)
 ##                                                                                                   ##
 #######################################################################################################
 
-# Generating the Time Series Features
+# Extracting Mean Realisations
 set.seed(10)
 mean_realisation <- matrix(nrow = length(retain_index), ncol = (12 * interpolating_points + 1))
-features <- matrix(nrow = length(retain_index), ncol = 8)
-per_ind_3_months_vector <- c()
-colnames(features) <- c("entropy", "period", "prop_points", "jan_dist", "peaks", "mean", "weight", "per_ind_4_months")
+period <- vector(mode = "numeric", length = length(retain_index))
 for (i in 1:length(retain_index)) {
   
   index <- retain_index[i]
@@ -143,6 +139,60 @@ for (i in 1:length(retain_index)) {
   f_mean <- apply(f, 2, mean)
   negbinom_intensity_mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
   mean_realisation[i, ] <- negbinom_intensity_mean
+  period[i] <- median(MCMC_output[, "period"])
+
+}
+  
+# Reordering mean fitted time-series to start at max
+reordered_mean_realisation <- matrix(nrow = length(retain_index), ncol = (12 * interpolating_points + 1))
+start_index <- apply(mean_realisation, 1, function(x) which(x == max(x)))
+end_index <- dim(reordered_mean_realisation)[2]
+for (i in 1:length(retain_index)) {
+  reordered_mean_realisation[i, ] <- mean_realisation[i, c(start_index[i]:end_index, 1:(start_index[i]-1))]
+}
+
+# Extracting Rainfall Data (also sort out leap year stuff)
+leap_years <- c(1976, 1980, 1984, 1988, 1992, 1996, 2000, 2004, 2008, 2016,	2020)
+months_length <- c(15, 16, 14, 14, 15, 16, 15, 15, 15, 16, 15, 15, 15, 16, 15, 16, 15, 15, 15, 16, 15, 15, 15, 16)
+rainfall_storage <- matrix(nrow = dim(overall)[1], ncol = length(months_length)) # this is 24 long rather than 25 like ento fits - why is this?? Need to check
+for (i in 1:length(overall$id)) {
+  index <- overall$id[i]
+  temp <- c()
+  rf <- read.csv(paste0("data/location_specific_rainfall/rainfall_ts", index, ".csv"))
+  rf <- rf %>%
+    group_by(daymonth_id) %>%
+    summarise(rainfall = mean(rainfall))
+  counter <- 1
+  count_vec <- counter
+  for (j in 1:length(months_length)) {
+    indices <- counter:(counter + months_length[j] - 1)
+    temp <- c(temp, sum(rf$rainfall[indices]))
+    counter <- counter + months_length[j]
+  }
+  rainfall_storage[i, ] <- temp
+}
+norm_rainfall_storage <- normalise_total(rainfall_storage)
+smoothed_rainfall <- t(apply(norm_rainfall_storage, 1, raster::movingFun, n = 4, circular = TRUE))
+rainfall_start_index <- apply(smoothed_rainfall, 1, function(x) which(x == max(x)))
+rainfall_seas_3 <- apply(norm_rainfall_storage, 1, percent_incidence, 3, 2)
+rainfall_seas_4 <- apply(norm_rainfall_storage, 1, percent_incidence, 4, 2)
+
+# Reordering rainfall time-series to start at max of vector density (note NOT max rainfall, which is what I calculate above)
+reordered_rainfall <- matrix(nrow = length(retain_index), ncol = length(months_length))
+end_rain_index <- dim(reordered_rainfall)[2]
+for (i in 1:length(retain_index)) {
+  reordered_rainfall[i, ] <- norm_rainfall_storage[i, c(start_index[i]:end_rain_index, 1:(start_index[i]-1))]
+}
+
+# Generating Features
+set.seed(10)
+features <- matrix(nrow = length(retain_index), ncol = 10)
+per_ind_3_months_vector <- c()
+colnames(features) <- c("dens_peak_timing", "rainfall_peak_timing", "peak_diff", "entropy", "period", "prop_points", "peaks", "mean", "weight", "per_ind_4_months")
+for (i in 1:length(retain_index)) {
+
+  # Loading in Specific Time Series
+  negbinom_intensity_mean <- reordered_mean_realisation[i, ]
   
   # Fitting 1 and 2 component Von Mises distributions to the smoothed data
   normed_output <- normalise_total(negbinom_intensity_mean)
@@ -166,24 +216,24 @@ for (i in 1:length(retain_index)) {
   # Extracting the features from the time-series
   # -> Note in contrast to Whittaker et al, these are ALL calculated on the fitted curves, rather than raw data
   # -> Need to figure out whether doing all this (including Von Mises fitting) to fitted curves is correct (rather than raw data)
+  dens_peak <- start_index[i]
+  rain_peak <- rainfall_start_index[i]
+  peak_diff <- dens_peak - rain_peak
   entropy <- entropic_measure(negbinom_intensity_mean)
-  median_period <- median(MCMC_output[, "period"])
   prop_points_mean <- points_greater_than_mean(1.6, negbinom_intensity_mean)
-  distance_from_jan <- calculate_peak_distance_from_jan(ordered_timepoints, negbinom_intensity_mean)
   percent_incidence_out <- percent_incidence(negbinom_intensity_mean, 4)
   per_ind_3_months_vector <- c(per_ind_3_months_vector, percent_incidence(negbinom_intensity_mean, 3))
   
   # Adding single time-series features to overall features matrix
-  features[i, ] <- c(entropy, median_period, prop_points_mean, distance_from_jan, peaks, mean, weight, percent_incidence_out)
+  features[i, ] <- c(dens_peak, rain_peak, peak_diff, entropy, period[i], prop_points_mean, peaks, mean, weight, percent_incidence_out)
   print(i)
 }
 
 features_df <- data.frame(id = metadata$id, country = metadata$country, admin1 = metadata$admin1, admin2 = metadata$admin2,
-                          cit = metadata$city, features, per_ind_3_months = per_ind_3_months_vector)
+                          city = metadata$city, features, per_ind_3_months = per_ind_3_months_vector,
+                          rainfall_seas_3 = rainfall_seas_3, rainfall_seas_4 = rainfall_seas_4)
 saveRDS(features_df, file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
 
-
-hist(100 * features_df$per_ind_4_months, xlab = "% Total Annual Density in 4 Months", main = NA)
 #######################################################################################################
 ##                                                                                                   ##
 ##                                   Clustering and Visualisation                                    ##
@@ -195,118 +245,207 @@ hist(100 * features_df$per_ind_4_months, xlab = "% Total Annual Density in 4 Mon
 
 # Normalising features
 normalised_features <- scale(features)
-normalised_features <- normalised_features[, -1]
-normalised_output <- t(apply(mean_realisation, 1, normalise_total))
+normalised_features <- normalised_features[, -c(1, 2)]
+normalised_output <- t(apply(reordered_mean_realisation, 1, normalise_total))
 
 # Running PCA on normalised features
+set.seed(20)
 PCA <- prcomp(normalised_features)
 summary <- summary(PCA)
-loadings <- PCA$rotation[, 1:7]
+loadings <- PCA$rotation[, 1:8]
 PCA_output <- as.matrix(normalised_features) %*% loadings
 
 # Clustering the data 
-num_clust <- 4
+num_clust <- 2
 clustering_results <- kmeans(PCA_output[, 1:4], num_clust, nstart = 20)
-
-cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, 
-                             cluster = clustering_results$cluster, mean_realisation)
+cluster_membership <- clustering_results$cluster
+cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, cluster = clustering_results$cluster, reordered_mean_realisation)
 saveRDS(cluster_output, file = here("data", "systematic_review_results", "cluster_membership.rds"))
 
-# Visualising the time-series belonging to each cluster
-colours <- palette()[1:num_clust]
-timepoints <- seq(0, 12, length = dim(normalised_output)[2])
-cluster_membership <- clustering_results$cluster
-table(cluster_membership)
-par(mfrow = c(2, 2))
-for (i in 1:num_clust) {
-  cluster <- normalised_output[clustering_results$cluster == i, ]
-  max <- max(cluster)
-  plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", ylim = c(0, 10), lwd = 2, col = colours[i], 
-       las = 1, xaxt = "n", xlab = "", ylab = "")
-  for (j in 1:length(cluster[, 1])) {
-    lines(timepoints, cluster[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
-  }
-  number_time_series <- length(cluster[, 1])
-  text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
-}
+# Plotting the First 2 Principle Components
 
-# Visualising the clusters of points
-plot(PCA_output[, 2], PCA_output[, 1], col = clustering_results$cluster, pch = 20, xlab = "PCA Comp 2", ylab = "PCA Comp 1", cex = 2, las = 1)
-clusters <- as.character(seq(1:num_clust))
-legend("bottomright", as.character(seq(1:num_clust)), cex = 1.5, col = palette()[1:num_clust], pch = 20)
+## Generating Ellipe and Centre for PC1
+one_cov <- cov(PCA_output[cluster_membership == 1, 1:2])
+one_mean <- apply(PCA_output[cluster_membership == 1, 1:2], 2, mean)
+one_ellipse <- ellipse::ellipse(x = one_cov, centre = one_mean, level = 0.95)
+
+## Generating Ellipe and Centre for PC2
+two_cov <- cov(PCA_output[cluster_membership == 2, 1:2])
+two_mean <- apply(PCA_output[cluster_membership == 2, 1:2], 2, mean)
+two_ellipse <- ellipse::ellipse(x = two_cov, centre = two_mean, level = 0.95)
+
+## Plotting the PCA Loadings and Ellipses
+ellipse_df <- data.frame(cluster = factor(c(rep(1, length(one_ellipse[, 1])), rep(2, length(two_ellipse[, 1])))), rbind(one_ellipse, two_ellipse))
+pca_df <- data.frame(cluster = factor(cluster_membership), PCA_output)
+pca_plot <- ggplot() +
+  geom_polygon(data = ellipse_df, aes(x = PC2, y = PC1, fill = cluster), alpha = 0.2) +
+  geom_point(data = pca_df, aes(x = PC2, y = PC1, col = cluster), size = 2) +
+  coord_cartesian(xlim = c(-2.25, 5), ylim = c(-2.5, 8)) + 
+  scale_fill_manual(values = colours[1:2]) +
+  scale_colour_manual(values = colours[1:2]) +
+  labs(x = "Principal Component 2 (15% Total Variation)",
+       y = "Principal Component 1 (54% Total Variation)") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+# Clustered Time-Series Plotting 
+cluster_df <- data.frame(cluster = factor(cluster_membership), id = seq(1:dim(normalised_output)[1]), normalised_output)
+cluster_df <- cluster_df %>%
+  pivot_longer(cols= X1:X25, names_to = "timepoint", values_to = "density") %>%
+  mutate(timepoint = as.numeric(gsub("X", "", timepoint))) %>%
+  mutate(timepoint2 = ifelse(timepoint <= 12, timepoint + 13, timepoint - 12))
+mean_df <- cluster_df %>%
+  group_by(timepoint, timepoint2, cluster) %>%
+  summarise(mean = mean(density))
+cluster_time_series <- ggplot(cluster_df, aes(x = timepoint2, y = 100 * density)) +
+  geom_line(aes(col = cluster, group = id), alpha = 0.2) +
+  coord_cartesian(ylim = c(0, 20)) +
+  scale_x_continuous(breaks = seq(1, 23, 2), labels = 1:12) +
+  facet_wrap(~cluster, nrow = 2) +
+  theme_bw() +
+  geom_line(data = mean_df, aes(x = timepoint2, y = 100 * mean, col = cluster), size = 2) +
+  scale_color_manual(values = colours[2:1]) +
+  labs(y = "Normalised Monthly Vector Density", x = "Peak-Standardised Time (Months)") +
+  theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
+
+set.seed(16)
+z <- data.frame(id = c(rep("dens", 65), rep("rain", 65)),
+                per_ind = c(features_df$per_ind_4_months, features_df$rainfall_seas_4),
+                cluster = c(cluster_membership, cluster_membership))
+cluster_catch_seasonality <- ggplot(z, aes(x = factor(cluster), y = 100 * per_ind, col = factor(cluster)))  +
+  geom_boxplot(fill = NA, outlier.shape = NA) +
+  facet_wrap(~id, nrow = 2, strip.position = "right",
+             labeller = as_labeller(c(dens = "% Annual Density In 4 Months", rain = "% Annual Rainfall In 4 Months"))) +
+  scale_color_manual(values = colours[2:1]) +
+  scale_x_discrete(labels = c("Cluster 1", "Cluster 2")) +
+  geom_jitter(aes(x = factor(cluster), y = 100 * per_ind), size = 1, width = 0.25) +
+  theme_bw() +
+  scale_y_continuous(position = "right", limits = c(35, 100)) +
+  theme(legend.position = "none", axis.title.x = element_blank(), axis.title.y = element_blank(),
+        strip.background = element_blank(), strip.placement = "outside")
+
+cluster_boxplots <- cowplot::plot_grid(cluster_time_series, cluster_catch_seasonality, ncol = 2, rel_widths = c(2, 1), axis = "b", align = "h")
+fig2_overall <- cowplot::plot_grid(pca_plot, al, ncol = 2, rel_widths = c(2, 2))
+ggsave(fig2_overall, file = here("figures", "Fig2_Overall_Raw.pdf"), width = 10, height = 5)
 
 # Visualising the properties of each cluster
+pdf("Figures/Supp_Figure_Cluster_Properties.pdf", height = 5, width = 12, useDingbats = FALSE)
 number_properties <- ncol(normalised_features)
 property_names <- colnames(normalised_features)
-par(mfrow = c(num_clust, number_properties + 1),
-    mar = c(4.5, 2, 2, 2))
-max <- 10 
+par(mfrow = c(num_clust, number_properties + 1), mar = c(3.5, 2, 2, 1), oma = c(1, 2.5, 5, 1))
+max <- 12
 mean_operation_values <- matrix(nrow = num_clust, ncol = number_properties)
-colnames(mean_operation_values) <- property_names
+colnames(mean_operation_values) <- c("Peak Timing", "Entropy", "Period", "Prop. Points\n1.6x Mean", 
+                                     "Number of\nPeaks", "Von Mises\nMean", "Von Mises\nWeight", "% Incidence\nIn 4 Months")
 for (i in 1:num_clust) {
-  if (i < num_clust) {
-    subsetter <- clustering_results$cluster == i
+  if (i == 1) {
+    subsetter <- cluster_membership == i
     cluster_time_series <- normalised_output[subsetter, ]
     cluster_time_series_properties <- normalised_features[subsetter, ]
-    plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[i], lwd = 2, ylab = "", xlab = "")
+    plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[2], lwd = 2, ylab = "", xlab = "", las = 1)
+    mtext("Time (Months)", side = 1, outer = FALSE, cex = 0.75, font = 2, line = 2, col = "grey20")
+    mtext("Norm.Vector\nDensity", side = 2, outer = FALSE, cex = 0.75, font = 2, line = 2, col = "grey20")
     for (j in 1:number_properties) {
-      hist(cluster_time_series_properties[, j], col = palette()[i], main = "", xlab = "", ylab = "",
+      hist(cluster_time_series_properties[, j], col = palette()[2], main = "", xlab = "", ylab = "", las = 1,
            xlim = c(min(cluster_time_series_properties[, j]), max(cluster_time_series_properties[, j])))
+      mtext(colnames(mean_operation_values)[j], side = 3, outer = FALSE, cex = 1, font = 2, line = 1, col = "grey20")
     }
     mean_operation_values[i, ] <- apply(cluster_time_series_properties, 2, mean)
   } else {
-    subsetter <- clustering_results$cluster == i
+    subsetter <- cluster_membership == i
     cluster_time_series <- normalised_output[subsetter, ]
     cluster_time_series_properties <- normalised_features[subsetter, ]
-    plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[i], lwd = 2, ylab = "", xlab = "")
+    plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[1], lwd = 2, ylab = "", xlab = "", las = 1)
+    mtext("Time (Months)", side = 1, outer = FALSE, cex = 0.75, font = 2, line = 2, col = "grey20")
+    mtext("Norm.Vector\nDensity", side = 2, outer = FALSE, cex = 0.75, font = 2, line = 2, col = "grey20")
     for (j in 1:number_properties) {
-      hist(cluster_time_series_properties[, j], col = palette()[i], main = "", xlab = "", ylab = "",
+      hist(cluster_time_series_properties[, j], col = palette()[1], main = "", xlab = "", ylab = "", las = 1,
            xlim = c(min(cluster_time_series_properties[, j]), max(cluster_time_series_properties[, j])))
-      mtext(property_names[j], side = 1, outer = FALSE, cex = 1, font = 2, line = 3, col = "grey20")
     }
     mean_operation_values[i, ] <- apply(cluster_time_series_properties, 2, mean)
   }
 }
+dev.off()
 
+## Supplementary Figure for 4 Clusters
+num_clust <- 4
+clustering_results <- kmeans(PCA_output[, 1:4], num_clust, nstart = 20)
+cluster_membership <- clustering_results$cluster
+cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, cluster = clustering_results$cluster, reordered_mean_realisation)
+
+cluster_df <- data.frame(cluster = factor(cluster_membership), id = seq(1:dim(normalised_output)[1]), normalised_output)
+cluster_df <- cluster_df %>%
+  pivot_longer(cols= X1:X25, names_to = "timepoint", values_to = "vector_density") %>%
+  mutate(timepoint = as.numeric(gsub("X", "", timepoint))) %>%
+  mutate(timepoint2 = ifelse(timepoint <= 12, timepoint + 13, timepoint - 12))
+
+rainfall_df <- data.frame(cluster = factor(cluster_membership), id = seq(1:dim(normalised_output)[1]), reordered_rainfall)
+rainfall_df <- rainfall_df %>%
+  pivot_longer(cols= X1:X24, names_to = "timepoint", values_to = "rainfall_density") %>%
+  mutate(timepoint = as.numeric(gsub("X", "", timepoint))) %>%
+  mutate(timepoint2 = ifelse(timepoint <= 11, timepoint + 12, timepoint - 11))
+
+cluster_df <- cluster_df %>%
+  left_join(rainfall_df, by = c("cluster", "id", "timepoint2"))
+
+mean_df <- cluster_df %>%
+  group_by(timepoint2, cluster) %>%
+  summarise(mean = mean(vector_density))
+mean_rainfall_df <- cluster_df %>%
+  group_by(timepoint2, cluster) %>%
+  summarise(mean = mean(rainfall_density))
+
+four_cluster <- ggplot() +
+  geom_line(data = cluster_df, aes(x = timepoint2, y = 100 * vector_density, col = cluster, group = id), alpha = 0.2) +
+  coord_cartesian(ylim = c(0, 20)) +
+  scale_x_continuous(breaks = seq(1, 23, 2), labels = 1:12) +
+  facet_wrap(~cluster, nrow = 2) +
+  theme_bw() +
+  geom_line(data = mean_df, aes(x = timepoint2, y = 100 * mean, col = cluster), size = 2) +
+  scale_color_manual(values = palette()[6:3]) +
+  labs(y = "Normalised Monthly Vector Density", x = "Peak-Standardised Time (Months)") +
+  theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
+ggsave(four_cluster, file = here("figures", "Supp_Figure_Four_Cluster_Sensitivity.pdf"), width = 7, height = 5.8)
+
+mean_timings <- data.frame(features_df, cluster = cluster_membership) %>%
+  group_by(cluster) %>%
+  summarise(mean_rainfall_timing = mean(rainfall_peak_timing) * 12/24,
+            se_rainfall = mean_rainfall_timing/sqrt(n()),
+            mean_vector_timing = mean(dens_peak_timing) * 12/25,
+            se_vector = mean_vector_timing/sqrt(n()),
+            mean_peak_diff = mean(peak_diff) * 12/25,
+            se_peak = mean_peak_diff/sqrt(n()),
+            n = n())
+x <- data.frame(peak_diff = features_df$peak_diff, cluster = factor(cluster_membership))
+aov <- aov(peak_diff ~ cluster, x)
+TukeyHSD(aov, "cluster")
+
+# Chi-Sq Test for Urban 
+# table(features_df$city, cluster_membership)
+# chisq.test(x = features_df$city[!features_df$city == "Mixture/Unclear"], y = cluster_membership[!features_df$city == "Mixture/Unclear"], simulate.p.value = TRUE, B = 5000)
+# chisq.test(x = features_df$city, y = cluster_membership, simulate.p.value = TRUE, B = 5000)
 # Visualising the time-series belonging to urban/rural
-urban_rural <- overall$city
-tab <- table(clustering_results$cluster, urban_rural)
-tab <- tab[, 2:3]
-chisq.test(tab)
-x <- table(features[, "peaks"], urban_rural)
-chisq.test(x[1:2, 2:3])
-colours <- palette()[1:2]
-timepoints <- seq(0, 12, length = dim(normalised_output)[2])
-locs <- c("Urban", "Rural")
-par(mfrow = c(1, 2))
-for (i in 1:2) {
-  set <- normalised_output[urban_rural == locs[i], ]
-  max <- max(set)
-  plot(timepoints, apply(set, 2, mean) * 100, type = "l", ylim = c(0, 10), lwd = 2, col = colours[i], 
-       las = 1, xaxt = "n", xlab = "", ylab = "")
-  for (j in 1:length(set[, 1])) {
-    lines(timepoints, set[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
-  }
-  number_time_series <- length(set[, 1])
-  text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
-}
-
-mean(features$per_ind_4_months[urban_rural == "Urban"]) # almost all urban time series are unimodal
-mean(features$per_ind_4_months[urban_rural == "Rural"]) # mixture of unimodal and bimodal time series for rural
-
-mean(features$peaks[urban_rural == "Urban"]) # almost all urban time series are unimodal
-mean(features$peaks[urban_rural == "Rural"]) # mixture of unimodal and bimodal time series for rural
-
-mean(features$per_ind_4_months[clustering_results$cluster == 1])
-mean(features$per_ind_4_months[clustering_results$cluster == 2])
-mean(features$per_ind_4_months[clustering_results$cluster == 3])
-mean(features$per_ind_4_months[clustering_results$cluster == 4])
-
-mean(features$jan_dist[clustering_results$cluster == 1])
-mean(features$jan_dist[clustering_results$cluster == 2])
-mean(features$jan_dist[clustering_results$cluster == 3])
-mean(features$jan_dist[clustering_results$cluster == 4])
-
+# urban_rural <- overall$city
+# tab <- table(clustering_results$cluster, urban_rural)
+# tab <- tab[, 2:3]
+# chisq.test(tab)
+# x <- table(features[, "peaks"], urban_rural)
+# chisq.test(x[1:2, 2:3])
+# colours <- palette()[1:2]
+# timepoints <- seq(0, 12, length = dim(normalised_output)[2])
+# locs <- c("Urban", "Rural")
+# par(mfrow = c(1, 2))
+# for (i in 1:2) {
+#   set <- normalised_output[urban_rural == locs[i], ]
+#   max <- max(set)
+#   plot(timepoints, apply(set, 2, mean) * 100, type = "l", ylim = c(0, 10), lwd = 2, col = colours[i], 
+#        las = 1, xaxt = "n", xlab = "", ylab = "")
+#   for (j in 1:length(set[, 1])) {
+#     lines(timepoints, set[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
+#   }
+#   number_time_series <- length(set[, 1])
+#   text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
+# }
 # Exploring entropy in further detail - consider removing/check with Sam I'm doing it correct
 # par(mfrow = c(2, 4))
 # for (i in which(cluster_membership == 3)) {
@@ -334,4 +473,61 @@ mean(features$jan_dist[clustering_results$cluster == 4])
 #   entropy <- mean(features[cluster_membership == i, "entropy"])
 #   text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
 #   text(6.5, 9.5, paste0("Entropy = ", round(entropy, 0)), cex = 1.5, col = "grey20")
+# }
+#
+# colours <- palette()[1:num_clust]
+# timepoints <- seq(0, 12, length = dim(normalised_output)[2])
+# cluster_membership <- clustering_results$cluster
+# table(cluster_membership)
+# par(mfrow = c(2, 2))
+# for (i in 1:num_clust) {
+#   cluster <- normalised_output[clustering_results$cluster == i, ]
+#   max <- max(cluster)
+#   plot(timepoints, apply(cluster, 2, mean) * 100, type = "l", ylim = c(0, 20), lwd = 2, col = colours[i], 
+#        las = 1, xaxt = "n", xlab = "", ylab = "")
+#   for (j in 1:length(cluster[, 1])) {
+#     lines(timepoints, cluster[j, ] * 100, col = adjustcolor(colours[i], alpha.f = 0.2))
+#   }
+#   number_time_series <- length(cluster[, 1])
+#   text(1.5, 9.5, paste0("n = ", number_time_series), cex = 1.5, col = "grey20")
+# }
+#
+# pca_plot +
+#   scale_fill_manual(values = palette()[3:4]) +
+#   scale_colour_manual(values = palette()[3:4]) +
+#   labs(x = "PC2", y = "PC1") 
+# 
+# cluster_catch_seasonality +
+#   scale_fill_manual(values = palette()[3:4]) +
+#   scale_colour_manual(values = palette()[3:4])
+#
+# number_properties <- ncol(normalised_features)
+# property_names <- colnames(normalised_features)
+# par(mfrow = c(num_clust, number_properties + 1), mar = c(4.5, 2, 2, 2))
+# max <- 10 
+# mean_operation_values <- matrix(nrow = num_clust, ncol = number_properties)
+# colnames(mean_operation_values) <- property_names
+# for (i in 1:num_clust) {
+#   if (i < num_clust) {
+#     subsetter <- clustering_results$cluster == i
+#     cluster_time_series <- normalised_output[subsetter, ]
+#     cluster_time_series_properties <- normalised_features[subsetter, ]
+#     plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[2], lwd = 2, ylab = "", xlab = "")
+#     for (j in 1:number_properties) {
+#       hist(cluster_time_series_properties[, j], col = palette()[2], main = "", xlab = "", ylab = "",
+#            xlim = c(min(cluster_time_series_properties[, j]), max(cluster_time_series_properties[, j])))
+#     }
+#     mean_operation_values[i, ] <- apply(cluster_time_series_properties, 2, mean)
+#   } else {
+#     subsetter <- clustering_results$cluster == i
+#     cluster_time_series <- normalised_output[subsetter, ]
+#     cluster_time_series_properties <- normalised_features[subsetter, ]
+#     plot(timepoints, apply(cluster_time_series, 2, mean) * 100, type = "l", ylim = c(0, max), col = palette()[1], lwd = 2, ylab = "", xlab = "")
+#     for (j in 1:number_properties) {
+#       hist(cluster_time_series_properties[, j], col = palette()[1], main = "", xlab = "", ylab = "",
+#            xlim = c(min(cluster_time_series_properties[, j]), max(cluster_time_series_properties[, j])))
+#       mtext(property_names[j], side = 1, outer = FALSE, cex = 1, font = 2, line = 3, col = "grey20")
+#     }
+#     mean_operation_values[i, ] <- apply(cluster_time_series_properties, 2, mean)
+#   }
 # }
