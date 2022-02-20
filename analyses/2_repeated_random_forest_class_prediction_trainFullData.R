@@ -276,16 +276,183 @@ for (i in 1:number_iterations) {
 saveRDS(iterations, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData.rds")))
 saveRDS(iterations_ups, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds")))
 
+# Loading in the fitted random forests and processing accuracy results 
+ups <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds"))
+no_ups <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData.rds"))
+for (i in 1:length(no_ups$test_roc_curve)) {
+  temp <- no_ups$test_roc_curve[[i]]
+  temp_ups <- ups$test_roc_curve[[i]]
+  if (i == 1) {
+    df <- temp
+    df$iteration <- 1
+    df_ups <- temp_ups
+    df_ups$iteration <- 1
+  } else {
+    temp$iteration <- i
+    df <- rbind(df, temp)
+    temp_ups$iteration <- i
+    df_ups <- rbind(df_ups, temp_ups)
+  }
+}
+
+# Plotting AUC and RF Results for Upsampled 
+AUC_upsample_plot <- ggplot(df_ups, aes(x = 1-specificity, y = sensitivity, id = factor(iteration))) +
+  geom_path(alpha = 0.5) +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
+  xlab("1 - Specificity") +
+  ylab("Sensitivity") +
+  theme_bw() +
+  theme(legend.position = "none") +
+  annotate("label", x = 0.67, y = 0.07,
+           label = paste0("Mean AUC = ", round(mean(ups$test_roc_auc), 2)),
+           label.padding = unit(0.35, "lines"), label.r = unit(0, "lines"),
+           label.size = unit(0.35, "lines"), size = 4)
+
+importance_upsample <- bind_rows(ups$importance)
+importance_upsample <- importance_upsample %>%
+  group_by(Variable) %>%
+  summarise(mean_Importance = mean(Importance),
+            stdev_Importance = sd(Importance),
+            stder_Importance = sd(Importance)/sqrt(n()))
+importance_upsample$lower <- pmax(rep(0, length(importance_upsample$mean_Importance)), 
+                                  importance_upsample$mean_Importance - 1.96 * importance_upsample$stdev_Importance)
+var_names_ups <- importance_upsample$Variable[order(importance_upsample$mean_Importance)]
+
+#### CHECK THESE NAMES ####
+var_names_ups # check this matches below
+new_names_ups <- c("Study\nfrom\nIndia", "LC180", "LC150", "LC130", "LC11", "Rain\nColdest\nQuarter", 
+                   "LC120", "LC20", "LC122", "LC10", "Rain.\nSeasonality", "LC110",
+                   "Temp.\nSeasonality", "LC30", "Study\nfrom\nIran", "Popn.\nPer\nKm2")
+importance_upsample_plot <- ggplot(importance_upsample, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
+                                                            fill = mean_Importance)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
+                    ymax = mean_Importance + 1.96 * stdev_Importance),
+                width = 0.5) +
+  scale_x_discrete(labels = new_names_ups) +
+  scale_fill_continuous(low = "grey", high = "#E14545") +
+  xlab("") + ylab("Variable Importance") +
+  lims(y = c(0, 0.064)) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(size = 7))
+
+rf_plot <- cowplot::plot_grid(AUC_upsample_plot, importance_upsample_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
+
+# Plotting Urban and Rural Time-Series
+# Extracting Mean Realisation for Each Time-Series
+interpolating_points <- 2
+urban_rural <- overall$city
+features_df <- readRDS(file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
+mean_realisation <- matrix(nrow = dim(overall)[1], ncol = (12 * interpolating_points + 1))
+prior <- "informative"
+for (i in 1:length(overall$id)) {
+  
+  index <- overall$id[i]
+  # Loading in and processing the fitted time-series
+  if (prior == "informative") {
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", index, ".rds"))
+  } else if (prior == "uninformative") {
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/uninformative/"), "/uninf_periodic_fit_", index, ".rds"))
+  }
+  # Extracting the mean fitted time-series
+  timepoints <- STAN_output$timepoints
+  all_timepoints <- STAN_output$all_timepoints
+  ordered_timepoints <- all_timepoints[order(all_timepoints)]
+  MCMC_output <- STAN_output$chain_output
+  f <- MCMC_output[, grepl("f", colnames(MCMC_output))]
+  f_mean <- apply(f, 2, mean)
+  negbinom_intensity_mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
+  mean_realisation[i, ] <- negbinom_intensity_mean
+  
+}
+normalised_output <- t(apply(mean_realisation, 1, normalise_total))
+
+# Calculating Degree of Seasonality, Time to 2% Etc
+seasonality <- c()
+for (i in 1:(dim(normalised_output)[1])) {
+  seasonality <- c(seasonality, calc_incidence_seasonality(normalised_output[i, ], 3))
+}
+
+# Extracting and Standardising (By Peak Timing) Dynamics By Rural/Urban Stratification
+urban <- normalised_output[urban_rural == "Urban", ]
+urban_start_index <- apply(urban, 1, function(x) which(x == max(x)))
+urban_mat <- matrix(nrow = dim(urban)[1], ncol = dim(urban)[2])
+urban_end <- dim(urban)[2]
+for (i in 1:dim(urban)[1]) {
+  urban_mat[i, ] <- urban[i, c(urban_start_index[i]:urban_end, 1:(urban_start_index[i]-1))]
+}
+urban_mat <- urban_mat[, c(13:25, 1:12)]
+urban_df <- data.frame(id = seq(1:(dim(urban_mat)[1])), setting = "urban", urban_mat)
+
+rural_one <- normalised_output[urban_rural == "Rural" & features_df$peaks == 1, ]
+rural_one_start_index <- apply(rural_one, 1, function(x) which(x == max(x)))
+rural_one_mat <- matrix(nrow = dim(rural_one)[1], ncol = dim(rural_one)[2])
+rural_one_end <- dim(rural_one)[2]
+for (i in 1:dim(rural_one)[1]) {
+  rural_one_mat[i, ] <- rural_one[i, c(rural_one_start_index[i]:rural_one_end, 1:(rural_one_start_index[i]-1))]
+}
+rural_one_mat <- rural_one_mat[, c(13:25, 1:12)]
+rural_one_df <- data.frame(id = seq(1:(dim(rural_one_mat)[1])), setting = "rural_one", rural_one_mat)
+
+rural_two <- normalised_output[urban_rural == "Rural" & features_df$peaks == 2, ]
+rural_two_start_index <- apply(rural_two, 1, function(x) which(x == max(x)))
+rural_two_mat <- matrix(nrow = dim(rural_two)[1], ncol = dim(rural_two)[2])
+rural_two_end <- dim(rural_two)[2]
+for (i in 1:dim(rural_two)[1]) {
+  rural_two_mat[i, ] <- rural_two[i, c(rural_two_start_index[i]:rural_two_end, 1:(rural_two_start_index[i]-1))]
+}
+rural_two_mat <- rural_two_mat[, c(17:25, 1:16)]
+rural_two_df <- data.frame(id = seq(1:(dim(rural_two_mat)[1])), setting = "rural_two", rural_two_mat)
+
+summary_df <- rbind(urban_df, rural_one_df, rural_two_df) %>%
+  pivot_longer(cols = X1:X25, names_to = "timepoint", values_to = "density") %>%
+  mutate(timepoint = as.numeric(gsub("X", "", timepoint))) %>%
+  group_by(setting, timepoint) %>%
+  summarise(mean_dens = mean(density),
+            low_dens = quantile(density, 0.10),
+            high_dens = quantile(density, 0.90))
+setting_names <- list('rural_one'="Rural One Peak", 'rural_two'="Rural Two Peak", 'urban'="Urban")
+setting_labeller <- function(variable, value){
+  return(setting_names[value])
+}
+setting_seasonalities <- data.frame(setting = c("rural_one", "rural_two", "urban"),
+                                    seasonality = c(mean(seasonality[urban_rural == "Rural" & features_df$peaks == 1]),
+                                                    mean(seasonality[urban_rural == "Rural" & features_df$peaks == 2]),
+                                                    mean(seasonality[urban_rural == "Urban"])))
+urban_rural_ts <- ggplot(summary_df, aes(x = timepoint, y = mean_dens , col = setting)) +
+  geom_path(size = 1.5) +
+  geom_ribbon(aes(ymin = low_dens, ymax = high_dens, fill = setting), alpha = 0.2, colour = NA) +
+  scale_color_manual(values = c("#447604", "#6EA65D","#807A85")) +
+  scale_fill_manual(values = c("#447604", "#6EA65D", "#807A85")) +
+  facet_wrap(~setting, nrow = 1, labeller = setting_labeller) +
+  theme_bw() +
+  scale_x_continuous(breaks = c(0, 2*25/12, 4*25/12, 6*25/12, 8*25/12, 10*25/12, 12*25/12),
+                     labels = c(0, 2, 4, 6, 8, 10, 12)) +
+  labs(y = "Normalised Vector Density", x = "Peak Standardised Timing (Months)") +
+  theme(legend.position = "none",
+        plot.margin = unit(c(0.5, 0.5, 0.5, 0), "cm"),
+        strip.background = element_rect(fill = "white")) +
+  geom_label(data = setting_seasonalities, x = 0.5, y = 0.19,
+             label = paste0("Mean\nSeasonality = ", round(setting_seasonalities$seasonality, 2)),
+             fill = "white", label.size = NA,
+             size = 5,
+             hjust = 0)
+
+figure3 <- cowplot::plot_grid(rf_plot, urban_rural_ts, nrow = 2, ncol = 1, rel_heights = c(1.1, 1), align = "v", axis = "br")
+figure3
+ggsave(filename = here("figures/Fig3_Overall.pdf"), plot = figure3, width = 12, height = 8)
 
 
+# Supplementary Figure - Upsample PDP and Covariate Profiling Plots
 ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds"))
 ups_vip_results <- tibble(id = 1, var = "bloop", x = 1, y = 1)
 for (i in 1:dim(ups)[1]) {
   final_random_forest_fit_ups <- ups$model[[i]]
   explainer_ups <- explain_tidymodels(
     model = final_random_forest_fit_ups,
-    data = dplyr::select(juiced_ups, -peaks),
-    y = as.numeric(juiced_ups$peaks),
+    data = dplyr::select(juiced_ups, -cluster),
+    y = as.numeric(juiced_ups$cluster),
     verbose = FALSE)
   rem_ups <- which(colnames(explainer_ups$dat) == "country_peaks")
   pdp_ups <- model_profile(explainer_ups, variables = colnames(explainer_ups$data)[-rem_ups], N = NULL)
@@ -308,66 +475,46 @@ ups_profile_plots <- ggplot(ups_summary_vip_results, aes(x = x, y = mean, col = 
   labs(x = "Covariate Value", y = "Average Prediction")
 ggsave(filename = here("figures/Supp_Figure_Upsample_Covariate_Profiling.pdf"), plot = ups_profile_plots, width = 8, height = 8)
 
-no_ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData.rds"))
-no_ups_vip_results <- tibble(id = 1, var = "bloop", x = 1, y = 1)
-for (i in 1:dim(no_ups)[1]) {
-  final_random_forest_fit <- no_ups$model[[i]]
-  explainer <- explain_tidymodels(
-    model = final_random_forest_fit,
-    data = dplyr::select(juiced, -peaks),
-    y = as.numeric(juiced$peaks),
-    verbose = FALSE)
-  rem <- which(colnames(explainer$dat) == "country_peaks")
-  pdp <- model_profile(explainer, variables = colnames(explainer$data)[-rem], N = NULL)
-  prof <- pdp$agr_profiles
-  df <- data.frame(id = i, var = prof$`_vname_`, x = prof$`_x_`, y = prof$`_yhat_`)
-  no_ups_vip_results <- rbind(no_ups_vip_results, df)
-  print(i)
-}
-no_ups_vip_results <- no_ups_vip_results[-1, ] 
-no_ups_summary_vip_results <- no_ups_vip_results %>%
-  group_by(var, x) %>%
-  summarise(mean = mean(y),
-            lower = min(y),
-            upper = max(y))
-no_ups_profile_plots <- ggplot(no_ups_summary_vip_results, aes(x = x, y = mean, col = var)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = lower, ymax = upper, fill = var), alpha = 0.2, col = NA) +
-  facet_wrap(~var, scale = "free_x") +
+# Plotting No Upsampling AUC
+no_ups_AUC <- ggplot(df, aes(x = 1-specificity, y = sensitivity, id = factor(iteration))) +
+  geom_path(alpha = 0.5) +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
+  xlab("1 - Specificity") +
+  ylab("Sensitivity") +
+  theme_bw() +
   theme(legend.position = "none") +
-  labs(x = "Covariate Value", y = "Average Prediction")
-ggsave(filename = here("figures/Supp_Figure_NoUpsample_Covariate_Profiling.pdf"), plot = no_ups_profile_plots, width = 8, height = 8)
+  annotate("label", x = 0.67, y = 0.07,
+           label = paste0("Mean AUC = ", round(mean(no_ups$test_roc_auc), 2)),
+           label.padding = unit(0.35, "lines"), label.r = unit(0, "lines"),
+           label.size = unit(0.35, "lines"), size = 4)
+no_ups_df <- bind_rows(no_ups$importance)
+no_ups_df$data <- "full_data"
+imp <- no_ups_df %>%
+  group_by(Variable) %>%
+  summarise(mean_Importance = mean(Importance),
+            stdev_Importance = sd(Importance),
+            stder_Importance = sd(Importance)/sqrt(n()))
+imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
+var_names <- imp$Variable[order(imp$mean_Importance)]
+### CHECK THESE NAMES
+new_names <- c("Study\nfrom\nIndia", "LC180", "LC150", "LC11", 
+               "Study\nfrom\nIran", "Temp.\nSeasonality", "LC130", "LC110",
+               "LC122", "LC120", "Rain\nColdest\nQuarter", "Rain.\nSeasonality",
+               "LC20", "LC30", "Population\nPer\nSquare Km", "LC10")
+importance_noUps_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
+                                         fill = mean_Importance)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
+                    ymax = mean_Importance + 1.96 * stdev_Importance),
+                width = 0.5) +
+  scale_x_discrete(labels = new_names) +
+  scale_fill_continuous(low = "grey", high = "#E14545") +
+  xlab("") + ylab("Variable Importance") +
+  lims(y = c(0, 0.04)) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(size = 7))
 
-# ups_profile_plots
-# no_ups_profile_plots
-# 
-# no_ups_summary_vip_results$data <- "noUps"
-# ups_summary_vip_results$data <- "Ups"
-# overall <- rbind(no_ups_summary_vip_results, ups_summary_vip_results)
-# ggplot(overall, aes(x = x, y = mean, col = data)) +
-#   geom_line() +
-#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = data), alpha = 0.2, col = NA) +
-#   facet_wrap(~var, scale = "free_x") +
-#   theme(legend.position = "none") +
-#   labs(x = "Covariate Value", y = "Average Prediction")
-# 
-# x <- bind_rows(iterations$importance) %>%
-#   group_by(Variable) %>%
-#   summarise(mean = mean(Importance),
-#             sd = sd(Importance),
-#             se = sd(Importance)/sqrt(n()))
-# x[rev(order(x$mean)), ]
-# x <- bind_rows(iterations_ups$importance) %>%
-#   group_by(Variable) %>%
-#   summarise(mean = mean(Importance),
-#             sd = sd(Importance),
-#             se = sd(Importance)/sqrt(n()))
-# x[rev(order(x$mean)), ]
-# x <- bind_rows(iterations_ups$importance, iterations$importance) %>%
-#   pivot_wider(names_from = sampling, values_from = Importance) %>%
-#   group_by(Variable) %>%
-#   summarise(mean_ups = mean(upsampling), 
-#             mean_no = mean(no_upsampling))
-# x <- bind_rows(iterations_ups$importance, iterations$importance) 
-# ggplot(x, aes(x= Variable, fill = sampling, y = Importance)) +
-#   geom_boxplot()
+noUps_Supp_Plot <- cowplot::plot_grid(no_ups_AUC, importance_noUps_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
+noUps_Supp_Plot
+ggsave(filename = here("figures/Supp_Figure_AUC_VIP_NoUps.pdf"), plot = noUps_Supp_Plot, width = 12, height = 5)

@@ -8,6 +8,20 @@ entropic_measure <- function(fitting_output) {
   return(entropy)
 }
 
+calc_incidence_seasonality <- function(input, num_months) {
+  days_in_year <- length(input)
+  period <- round(days_in_year * num_months/12)
+  incidence_vector <- vector(mode = "numeric", length = days_in_year)
+  for (i in 1:days_in_year) {
+    index <- i:(i+period-1)
+    if (sum(index > days_in_year) > 0) {
+      index[index>days_in_year] <- index[index>days_in_year] - days_in_year
+    }
+    incidence_vector[i] <- sum(input[index])/sum(input)
+  }
+  return(max(incidence_vector))
+}
+
 # Calculates percentage of incidence in peak X months
 percent_incidence <- function(fitting_output, number_of_months, timepoints_per_month = NA) {
   
