@@ -29,8 +29,12 @@ envt_variables <- read.csv(here("data", "environmental_covariates", "location_ec
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
   group_by(id, country, admin1, admin2) %>%
   summarise(across(population_per_1km:mean_temperature_driest_quarter, ~ mean(.x, na.rm = TRUE)))
+cluster_membership <- readRDS(here("data", "systematic_review_results", "cluster_membership.rds"))
+cluster_membership <- cluster_membership[, c("id", "cluster")]
 overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
+overall <- overall %>%
+  left_join(cluster_membership, by = "id")
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -41,14 +45,14 @@ overall <- ts_metadata %>%
 # Subsetting Outcome and Variables for Analysis + Log_10'ing Population (Easier for Visualisation Later On)
 set.seed(234)
 data <- overall %>% # need to figure out whether to do rf_train or data here 
-  dplyr::select(peaks, country, population_per_1km:mean_temperature_driest_quarter, -LC_190, -LC_210, -mean_temperature_driest_quarter) %>% # LC190 is urban so correlated v strong with PopPer1km
+  dplyr::select(cluster, country, population_per_1km:mean_temperature_driest_quarter, -LC_190, -LC_210, -mean_temperature_driest_quarter) %>% # LC190 is urban so correlated v strong with PopPer1km
   mutate(country = case_when((country == "Afghanistan" | country == "Djibouti" | 
                                 country == "Myanmar" | country == "Pakistan") ~ "aOther",
                              TRUE ~ country)) %>%
   mutate(country = as.factor(country)) %>%
-  mutate(country_peaks = paste0(peaks, "_", country))
-data$peaks <- ifelse(data$peaks == 1, "one", "two")
-data$peaks <- as.factor(data$peaks)
+  mutate(country_peaks = paste0(cluster, "_", country))
+data$cluster <- ifelse(data$cluster == 1, "one", "two")
+data$cluster <- as.factor(data$cluster)
 data$population_per_1km <- log(data$population_per_1km)
 
 # Storage Tibble for Results
@@ -76,7 +80,7 @@ for (i in 1:number_iterations) {
   seed <- seeds[i]
   
   # Prepping Data - Selecting Variables, Creating Recipe - No Upsampling
-  envt_recipe <- recipe(peaks  ~ ., data = data) %>%
+  envt_recipe <- recipe(cluster  ~ ., data = data) %>%
     update_role(country_peaks, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
     step_center(all_numeric()) %>% 
     step_scale(all_numeric()) %>%
@@ -85,22 +89,22 @@ for (i in 1:number_iterations) {
     step_dummy(country)
   envt_prepped <- prep(envt_recipe, training = data, verbose = TRUE)
   juiced <- juice(envt_prepped)
-  new_envt_recipe <- recipe(peaks ~ ., data = juiced) %>% # have to do this way to ensure recipe isn't applied *within* tune-grid
+  new_envt_recipe <- recipe(cluster ~ ., data = juiced) %>% # have to do this way to ensure recipe isn't applied *within* tune-grid
     update_role(country_peaks, new_role = "ID")           # when we do this, recipe is applied within each fold, and diff covariates are removed for each
   
   # Prepping Data - Selecting Variables, Creating Recipe - Upsampling to Balance Amount of Data for 1 and 2 Peaks
   set.seed(915) ## does this need to be removed????
-  envt_recipe_ups <- recipe(peaks  ~ ., data = data) %>%
+  envt_recipe_ups <- recipe(cluster  ~ ., data = data) %>%
     update_role(country_peaks, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
     step_center(all_numeric()) %>% 
     step_scale(all_numeric()) %>%
     step_nzv(all_numeric(), freq_cut = 8, unique_cut = 25) %>% # remove variables that are sparse and unbalanced - remove where >80% of variable values are same value
     step_corr(all_numeric(), -contains(c("population_per_1km", "temperature_seasonality", "precipitation_seasonality_cv")), threshold = 0.50) %>%
     step_dummy(country) %>%
-    step_smote(peaks)
+    step_smote(cluster)
   envt_prepped_ups <- prep(envt_recipe_ups, training = data, verbose = TRUE)
   juiced_ups <- juice(envt_prepped_ups)
-  new_envt_recipe_ups <- recipe(peaks ~ ., data = juiced_ups) %>% # have to do this way to ensure recipe isn't applied *within* tune-grid
+  new_envt_recipe_ups <- recipe(cluster ~ ., data = juiced_ups) %>% # have to do this way to ensure recipe isn't applied *within* tune-grid
     update_role(country_peaks, new_role = "ID")                   # when we do this, recipe is applied within each fold, and diff covariates are removed for each
   
   # Setting Up The Random Forest Framework
@@ -157,11 +161,11 @@ for (i in 1:number_iterations) {
     dplyr::filter(mtry == best$mtry, min_n == best$min_n) %>%
     dplyr::arrange(., .row)
   cv_auc <- show_best(tune_res, "roc_auc")[1, "mean"]
-  cv_accuracy <- sum(cv_predictions$.pred_class == cv_predictions$peaks)/length(cv_predictions$peaks)
-  one_peak <- cv_predictions$peaks == "one"
-  two_peak <- cv_predictions$peaks == "two"
-  cv_one_peak_accuracy <- sum(cv_predictions$.pred_class[one_peak] == cv_predictions$peaks[one_peak])/length(cv_predictions$peaks[one_peak])
-  cv_two_peak_accuracy <- sum(cv_predictions$.pred_class[two_peak] == cv_predictions$peaks[two_peak])/length(cv_predictions$peaks[two_peak])
+  cv_accuracy <- sum(cv_predictions$.pred_class == cv_predictions$cluster)/length(cv_predictions$cluster)
+  one_peak <- cv_predictions$cluster == "one"
+  two_peak <- cv_predictions$cluster == "two"
+  cv_one_peak_accuracy <- sum(cv_predictions$.pred_class[one_peak] == cv_predictions$cluster[one_peak])/length(cv_predictions$cluster[one_peak])
+  cv_two_peak_accuracy <- sum(cv_predictions$.pred_class[two_peak] == cv_predictions$cluster[two_peak])/length(cv_predictions$cluster[two_peak])
   
   ## Upsampling
   best_ups <- select_best(tune_res_ups, "roc_auc")
@@ -170,11 +174,11 @@ for (i in 1:number_iterations) {
     dplyr::filter(mtry == best_ups$mtry, min_n == best_ups$min_n) %>%
     dplyr::arrange(., .row)
   cv_auc_ups <- show_best(tune_res_ups, "roc_auc")[1, "mean"]
-  cv_accuracy_ups <- sum(cv_predictions_ups$.pred_class == cv_predictions_ups$peaks)/length(cv_predictions_ups$peaks)
-  one_peak_ups <- cv_predictions_ups$peaks == "one"
-  two_peak_ups <- cv_predictions_ups$peaks == "two"
-  cv_one_peak_accuracy_ups <- sum(cv_predictions_ups$.pred_class[one_peak] == cv_predictions_ups$peaks[one_peak])/length(cv_predictions_ups$peaks[one_peak])
-  cv_two_peak_accuracy_ups <- sum(cv_predictions_ups$.pred_class[two_peak] == cv_predictions_ups$peaks[two_peak])/length(cv_predictions_ups$peaks[two_peak])
+  cv_accuracy_ups <- sum(cv_predictions_ups$.pred_class == cv_predictions_ups$cluster)/length(cv_predictions_ups$cluster)
+  one_peak_ups <- cv_predictions_ups$cluster == "one"
+  two_peak_ups <- cv_predictions_ups$cluster == "two"
+  cv_one_peak_accuracy_ups <- sum(cv_predictions_ups$.pred_class[one_peak] == cv_predictions_ups$cluster[one_peak])/length(cv_predictions_ups$cluster[one_peak])
+  cv_two_peak_accuracy_ups <- sum(cv_predictions_ups$.pred_class[two_peak] == cv_predictions_ups$cluster[two_peak])/length(cv_predictions_ups$cluster[two_peak])
   
   # Selecting the Best Model and Final Fitting
   unregister_dopar()
@@ -185,14 +189,14 @@ for (i in 1:number_iterations) {
   final_random_forest_fit <- random_forest_final %>%
     fit(data = juiced)
   fit_OOS_preds <- final_random_forest_fit$fit$fit$fit$predictions
-  fit_OOS_preds_df <- data.frame(truth = factor(juiced$peaks), estimate = fit_OOS_preds[, 1])
+  fit_OOS_preds_df <- data.frame(truth = factor(juiced$cluster), estimate = fit_OOS_preds[, 1])
   test_roc_auc <- roc_auc(data = fit_OOS_preds_df, truth = truth, estimate)
   test_preds <- fit_OOS_preds[, 1]
   test_roc_curve <- roc_curve(data = fit_OOS_preds_df, truth = "truth", estimate)
   peak_assign <- ifelse(fit_OOS_preds[, 1] > 0.50, "one", "two")
-  test_accuracy <- sum(peak_assign == juiced$peaks)/length(juiced$peaks)
-  test_one_peak_accuracy <- sum(peak_assign[juiced$peaks == "one"] == juiced$peaks[juiced$peaks == "one"])/length(juiced$peaks[juiced$peaks == "one"])
-  test_two_peak_accuracy <- sum(peak_assign[juiced$peaks == "two"] == juiced$peaks[juiced$peaks == "two"])/length(juiced$peaks[juiced$peaks == "two"])
+  test_accuracy <- sum(peak_assign == juiced$cluster)/length(juiced$cluster)
+  test_one_peak_accuracy <- sum(peak_assign[juiced$cluster == "one"] == juiced$cluster[juiced$cluster == "one"])/length(juiced$cluster[juiced$cluster == "one"])
+  test_two_peak_accuracy <- sum(peak_assign[juiced$cluster == "two"] == juiced$cluster[juiced$cluster == "two"])/length(juiced$cluster[juiced$cluster == "two"])
   
   ## Upsampling
   random_forest_final_ups <- rf_workflow_ups %>%
@@ -200,14 +204,14 @@ for (i in 1:number_iterations) {
   final_random_forest_fit_ups <- random_forest_final_ups %>%
     fit(data = juiced_ups)
   fit_OOS_preds_ups <- final_random_forest_fit_ups$fit$fit$fit$predictions
-  fit_OOS_preds_df_ups <- data.frame(truth = factor(juiced_ups$peaks), estimate = fit_OOS_preds_ups[, 1])
+  fit_OOS_preds_df_ups <- data.frame(truth = factor(juiced_ups$cluster), estimate = fit_OOS_preds_ups[, 1])
   test_roc_auc_ups <- roc_auc(data = fit_OOS_preds_df_ups, truth = truth, estimate)
   test_preds_ups <- fit_OOS_preds_ups[, 1]
   test_roc_curve_ups <- roc_curve(data = fit_OOS_preds_df_ups, truth = "truth", estimate)
   peak_assign_ups <- ifelse(fit_OOS_preds_ups[, 1] > 0.50, "one", "two")
-  test_accuracy_ups <- sum(peak_assign_ups == juiced_ups$peaks)/length(juiced_ups$peaks)
-  test_one_peak_accuracy_ups <- sum(peak_assign_ups[juiced_ups$peaks == "one"] == juiced_ups$peaks[juiced_ups$peaks == "one"])/length(juiced_ups$peaks[juiced_ups$peaks == "one"])
-  test_two_peak_accuracy_ups <- sum(peak_assign_ups[juiced_ups$peaks == "two"] == juiced_ups$peaks[juiced_ups$peaks == "two"])/length(juiced_ups$peaks[juiced_ups$peaks == "two"])
+  test_accuracy_ups <- sum(peak_assign_ups == juiced_ups$cluster)/length(juiced_ups$cluster)
+  test_one_peak_accuracy_ups <- sum(peak_assign_ups[juiced_ups$cluster == "one"] == juiced_ups$cluster[juiced_ups$cluster == "one"])/length(juiced_ups$cluster[juiced_ups$cluster == "one"])
+  test_two_peak_accuracy_ups <- sum(peak_assign_ups[juiced_ups$cluster == "two"] == juiced_ups$cluster[juiced_ups$cluster == "two"])/length(juiced_ups$cluster[juiced_ups$cluster == "two"])
   
   # Calculating variable importance
   

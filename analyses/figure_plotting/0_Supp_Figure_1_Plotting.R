@@ -81,10 +81,6 @@ total_raw_catch <- catch_data %>%
   pivot_longer(-c(country, id), names_to = "timepoint", values_to = "raw_catch") %>%
   group_by(id) %>%
   summarise(total_raw = sum(raw_catch, na.rm = TRUE))
-# total_per_country <- mean %>%
-#   pivot_longer(-country, names_to = "timepoint", values_to = "catch") %>%
-#   group_by(id, country) %>%
-#   summarise(total = sum(catch, na.rm = TRUE))
 raw_catch_data <- catch_data %>%
   pivot_longer(-c(country, id), names_to = "timepoint", values_to = "raw_catch") %>%
   left_join(total_raw_catch, by = "id") %>%

@@ -109,8 +109,7 @@ a <- ggplot() +
 ggsave2(file = here("figures", "Fig1A.pdf"), plot = a, width = 11, height = 6, dpi = 500)
 
 # Plotting some representative time-series
-retain_index <- metadata$id 
-for_plot_index <- c(5, 33, 38, 42, 63, 70)
+for_plot_index <- c(4, 57, 26, 53, 34, 31)
 interpolating_points <- 2
 prior <- "informative"
 mean_realisation <- matrix(nrow = length(for_plot_index), ncol = (12 * interpolating_points + 1))
@@ -119,13 +118,13 @@ upper_realisation <- matrix(nrow = length(for_plot_index), ncol = (12 * interpol
 counter <- 1
 for (i in 1:length(for_plot_index)) {
   
-  index <- which(retain_index %in% for_plot_index[i])
+  index <- metadata$id[for_plot_index[i]]
   
   # Loading in and processing the fitted time-series
   if (prior == "informative") {
-    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", for_plot_index[i], ".rds"))
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", index, ".rds"))
   } else if (prior == "uninformative") {
-    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/uninformative/"), "/uninf_periodic_fit_", for_plot_index[i], ".rds"))
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/uninformative/"), "/uninf_periodic_fit_", index, ".rds"))
   }  
   
   # Extracting the mean fitted time-series
@@ -144,29 +143,27 @@ for (i in 1:length(for_plot_index)) {
   lower_realisation[counter, ] <- lower
   upper_realisation[counter, ] <- upper
   counter <- counter + 1
-  # plot(mean_realisation[i, ], main = paste0(metadata$id[index], "  ", metadata$country[index]))
-  # browser()
+  plot(mean_realisation[i, ], main = paste0(metadata$id[for_plot_index[i]], "  ", metadata$country[for_plot_index[i]]))
+  #browser()
 }
 
 # Plotting all of the outputs to see which to feature in Fig 1A plot
-fit_index <- retain_index %in% c(5, 33, 42, 38, 63, 70)
 mean <- as.data.frame(mean_realisation)
-mean$country <- metadata$country[fit_index]
+mean$country <- metadata$country[for_plot_index]
 mean_pv <- mean %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "mean")
 
 lower <- as.data.frame(lower_realisation)
-lower$country <- metadata$country[fit_index]
+lower$country <- metadata$country[for_plot_index]
 lower_pv <- lower %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "lower")
 
 upper <- as.data.frame(upper_realisation)
-upper$country <- metadata$country[fit_index]
+upper$country <- metadata$country[for_plot_index]
 upper_pv <- upper %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "upper")
 
-catch_data <- metadata %>%
-  filter(id %in% for_plot_index) %>%
+catch_data <- metadata[for_plot_index, ] %>%
   dplyr::select(country, Jan:Dec)
 total_raw_catch <- catch_data %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "raw_catch") %>%
@@ -206,7 +203,7 @@ b <- ggplot(data = overall) +
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(size = 12, face = "bold")) 
 b
-ggsave2(file = here("figures", "Fig1B.pdf"), plot = b, width = 11, height = 6, dpi = 500)
+ggsave2(file = here("figures", "Fig1B.pdf"), plot = b, width = 8, height = 4.5, dpi = 500)
 
 c <- plot_grid(a, b, ncol = 2, align = "h", axis = "b")
 ggsave2(file = here("figures", "Fig1_Overall.pdf"), plot = c, width = 15, height = 5.5, dpi = 500)
