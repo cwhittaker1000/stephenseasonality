@@ -61,12 +61,12 @@ iterations <- tibble(seed = 1, model = list(1), iteration = 1, juiced = list(1),
                      cv_roc_auc = 1, cv_accuracy = 1, cv_one_peak_accuracy = 1, cv_two_peak_accuracy = 1,
                      test_predictions = list(1), test_roc_curve <- list(1),
                      test_roc_auc = 1, test_accuracy = 1, test_one_peak_accuracy = 1, test_two_peak_accuracy = 1,
-                     importance = list(1))
+                     importance = list(1), recipe = list(1))
 iterations_ups <- tibble(seed = 1, model = list(1), iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
                          cv_roc_auc = 1, cv_accuracy = 1, cv_one_peak_accuracy = 1, cv_two_peak_accuracy = 1,
                          test_predictions = list(1), test_roc_curve <- list(1),
                          test_roc_auc = 1, test_accuracy = 1, test_one_peak_accuracy = 1, test_two_peak_accuracy = 1,
-                         importance = list(1))
+                         importance = list(1), recipe = list(1))
 
 # Running Multiple Random Forest Models Varying Seed Each Time
 seeds <- c(345, 234, 284, 102391, 19, 2948457, 294894, 189, 38484902, 284651, 83829, 72645,
@@ -258,6 +258,7 @@ for (i in 1:number_iterations) {
   iterations[i, "test_one_peak_accuracy"] <- test_one_peak_accuracy
   iterations[i, "test_two_peak_accuracy"] <- test_two_peak_accuracy
   iterations[i, "importance"] <- list(list(var_imp))
+  iterations[i, "recipe"] <- list(list(envt_prepped))
   
   ## Upsampling
   iterations_ups[i, "seed"] <- seed
@@ -277,6 +278,7 @@ for (i in 1:number_iterations) {
   iterations_ups[i, "test_one_peak_accuracy"] <- test_one_peak_accuracy_ups
   iterations_ups[i, "test_two_peak_accuracy"] <- test_two_peak_accuracy_ups
   iterations_ups[i, "importance"] <- list(list(var_imp_ups))
+  iterations[i, "recipe"] <- list(list(envt_prepped_ups))
   
   print(paste0("Iteration ", i, " - Seed is ", seed))
   

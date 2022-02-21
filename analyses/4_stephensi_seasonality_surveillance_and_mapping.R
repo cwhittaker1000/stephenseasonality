@@ -1,15 +1,23 @@
 # Loading Required Libraries
-library(tidyverse); library(sf); library(data.table); library(tidymodels)
+library(tidyverse); library(sf); library(tidymodels)
 library(sp); library(raster); library(rgeos); library(rgdal); library(maptools); library(dplyr); 
-library(tidyr); library(maps);library(scales); library(here)
+library(tidyr); library(maps);library(scales); library(here) 
 
-# Loading in geographical data
-dji <- read.csv("data/environmental_covariates/DJI_environment_data.csv") 
-eth <- read.csv("data/environmental_covariates/ETH_environment_data.csv")
-eri <- read.csv("data/environmental_covariates/ERI_environment_data.csv")
-sdn <- read.csv("data/environmental_covariates/SDN_environment_data.csv")
-som <- read.csv("data/environmental_covariates/SOM_environment_data.csv")
+# Loading in ecological covariate data for each country
+dji <- read.csv("data/environmental_covariates/DJI_environment_data.csv") %>%
+  mutate(country = "aOther")
+eth <- read.csv("data/environmental_covariates/ETH_environment_data.csv") %>%
+  mutate(country = "aOther")
+eri <- read.csv("data/environmental_covariates/ERI_environment_data.csv") %>%
+  mutate(country = "aOther")
+sdn <- read.csv("data/environmental_covariates/SDN_environment_data.csv") %>%
+  mutate(country = "aOther")
+som <- read.csv("data/environmental_covariates/SOM_environment_data.csv") %>%
+  mutate(country = "aOther")
+hoa_covariates_raw <- rbindlist(list(dji, eth, eri, sdn, som), fill = TRUE)
+country_vector <- c(rep("dji", dim(dji)[1]), rep("eth", dim(eth)[1]), rep("eri", dim(eri)[1]), rep("sdn", dim(sdn)[1]), rep("som", dim(som)[1]))
 
+# Loading in geographical data (shapefiles) for each country
 dji_shp <- st_as_sf(getData('GADM', country = 'DJI', level = 0, path = here("data/admin_units")))
 eth_shp <- st_as_sf(getData('GADM', country = 'ETH', level = 0, path = here("data/admin_units")))
 eri_shp <- st_as_sf(getData('GADM', country = 'ERI', level = 0, path = here("data/admin_units")))
@@ -17,158 +25,130 @@ sdn_shp <- st_as_sf(getData('GADM', country = 'SDN', level = 0, path = here("dat
 som_shp <- st_as_sf(getData('GADM', country = 'SOM', level = 0, path = here("data/admin_units")))
 hoa_outline <- rbind(dji_shp, eth_shp, eri_shp, sdn_shp, som_shp)
 
-# Loading in Location Specific Data and Training the Recipe
+# Loading in Metadata and Location Data
 ts_metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
 envt_variables <- read.csv(here("data", "environmental_covariates", "location_ecological_data.csv")) %>%
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
   group_by(id, country, admin1, admin2) %>%
   summarise(across(population_per_1km:mean_temperature_driest_quarter, ~ mean(.x, na.rm = TRUE)))
+cluster_membership <- readRDS(here("data", "systematic_review_results", "cluster_membership.rds"))
+cluster_membership <- cluster_membership[, c("id", "cluster")]
 overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
+overall <- overall %>%
+  left_join(cluster_membership, by = "id")
 
+# Loading In Environmental Covariates 
 data <- overall %>% # need to figure out whether to do rf_train or data here 
-  dplyr::select(peaks, country, population_per_1km:mean_temperature_driest_quarter, -LC_190, -LC_210, -mean_temperature_driest_quarter) %>% # LC190 is urban so correlated v strong with PopPer1km
+  dplyr::select(cluster, country, population_per_1km:mean_temperature_driest_quarter, -LC_190, -LC_210, -mean_temperature_driest_quarter) %>% # LC190 is urban so correlated v strong with PopPer1km
   mutate(country = case_when((country == "Afghanistan" | country == "Djibouti" | 
                                 country == "Myanmar" | country == "Pakistan") ~ "aOther",
                              TRUE ~ country)) %>%
   mutate(country = as.factor(country)) %>%
-  mutate(country_peaks = paste0(peaks, "_", country))
-data$peaks <- ifelse(data$peaks == 1, "one", "two")
-data$peaks <- as.factor(data$peaks)
+  mutate(country_peaks = paste0(cluster, "_", country))
+data$cluster <- ifelse(data$cluster == 1, "one", "two")
+data$cluster <- as.factor(data$cluster)
 data$population_per_1km <- log(data$population_per_1km)
 
 # Processing Arran's Horn of Africa Country Rasters
-vars_from_rf <- c("LC_10", "LC_11", "LC_110", "LC_120", "LC_122", "LC_130", "LC_150", "LC_180", "LC_20", "LC_30",
-                  "population_per_1km", "precipitation_coldest_quarter", # "country_India", "country_Iran", # don't forget about these
-                  "precipitation_seasonality_cv", "temperature_seasonality")
-dji_dat <- dji %>%
-  dplyr::select(-elevation, -goat, -sheep, -irrigation, -nrow, -ncol) %>%
-  rename(population_per_1km = population_density,
-         precipitation_coldest_quarter = worldclim_19,
-         precipitation_seasonality_cv = worldclim_15,
-         temperature_seasonality = worldclim_4) %>%
-  mutate(country_India = 0, country_Iran = 0, LC_122 = 0) %>%
-  dplyr::select(lat, lon, vars_from_rf)
-eth_dat <- eth %>%
-  dplyr::select(-elevation, -goat, -sheep, -irrigation, -nrow, -ncol) %>%
-  rename(population_per_1km = population_density,
-         precipitation_coldest_quarter = worldclim_19,
-         precipitation_seasonality_cv = worldclim_15,
-         temperature_seasonality = worldclim_4) %>%
-  mutate(country_India = 0, country_Iran = 0) %>%
-  dplyr::select(lat, lon, vars_from_rf)
-eri_dat <- eri %>%
-  dplyr::select(-elevation, -goat, -sheep, -irrigation, -nrow, -ncol)  %>%
-  rename(population_per_1km = population_density,
-         precipitation_coldest_quarter = worldclim_19,
-         precipitation_seasonality_cv = worldclim_15,
-         temperature_seasonality = worldclim_4) %>%
-  mutate(country_India = 0, country_Iran = 0) %>%
-  dplyr::select(lat, lon, vars_from_rf)
-sdn_dat <- sdn %>%
-  dplyr::select(-elevation, -goat, -sheep, -irrigation, -nrow, -ncol)  %>%
-  rename(population_per_1km = population_density,
-         precipitation_coldest_quarter = worldclim_19,
-         precipitation_seasonality_cv = worldclim_15,
-         temperature_seasonality = worldclim_4) %>%
-  mutate(country_India = 0, country_Iran = 0) %>%
-  dplyr::select(lat, lon, vars_from_rf)
-som_dat <- som %>%
-  dplyr::select(-elevation, -goat, -sheep, -irrigation, -nrow, -ncol)  %>%
-  rename(population_per_1km = population_density,
-         precipitation_coldest_quarter = worldclim_19,
-         precipitation_seasonality_cv = worldclim_15,
-         temperature_seasonality = worldclim_4) %>%
-  mutate(country_India = 0, country_Iran = 0) %>%
-  dplyr::select(lat, lon, vars_from_rf)
-hoa <- rbind(dji_dat, eth_dat, eri_dat, sdn_dat, som_dat)
-hoa$population_per_1km <- log(hoa$population_per_1km)
+lon <- hoa_covariates_raw$lon
+lat <- hoa_covariates_raw$lat
+hoa_envt_covariates <- hoa_covariates_raw %>%
+  dplyr::select(-lon, -lat, -ISO, -cell, -goat, -sheep, -cattle, -irrigation, -nrow, -ncol, -worldclim_9) %>%
+  mutate(country_peaks = paste0(country, "_1")) %>%
+  mutate(cluster = 3) %>%
+  rename(population_per_1km = population_density) %>%
+  mutate(LC_121 = 0, LC_71 = 0) %>%
+  mutate(country = as.factor(country), cluster = as.factor(cluster))
+hoa_envt_covariates$population_per_1km <- log(hoa_envt_covariates$population_per_1km + 1)
 
-# Regenerating the same recipe used in the Random Forest Fitting to Process this New Data
-data_for_recipe_recapit <- data %>%
-  dplyr::select(peaks, vars_from_rf) %>%
-  mutate(lat = 0, lon = 0)
-set.seed(915)
-envt_recipe_ups <- recipe(peaks  ~ ., data = data_for_recipe_recapit) %>% # go and manually check that this gives same results on *data* object as the full recipe does!!
-  step_center(all_numeric(), -lat, -lon) %>% 
-  step_scale(all_numeric(), -lat, -lon) 
-envt_prepped_ups <- prep(envt_recipe_ups, training = data_for_recipe_recapit, verbose = TRUE)
-juiced_HOA <- bake(envt_prepped_ups, hoa) %>%
-  dplyr::select(lat, lon, everything()) %>%
-  mutate(country_India = 0, country_Iran = 0)
+# Checking where the NAs Are for Ecological Covariates and Replacing With 0s (NA = 0 In This Context As Means Country Lacks That Landcover Type)
+for (i in 1:ncol(hoa_envt_covariates)) {
+  print(c(i, sum(is.na(hoa_envt_covariates[, i]))))
+}
+colnames(hoa_envt_covariates)[43:52]
+hoa_envt_covariates[is.na(hoa_envt_covariates)] <- 0
 
-# Load In The Random Forest Objects and Generate Predictions
-juiced_HOA$country_peaks <- "bloop" # add dummy category
+# Predicting Horn of Africa Using Each of the Random Forests 
 iterations_ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds"))
-final_random_forest_fit_ups <- iterations_ups$model[[1]]
-predictions <- predict(final_random_forest_fit_ups, juiced_HOA, "prob")
-peaks <- ifelse(predictions$.pred_one >= 0.5, "one", "two")
+raster_iterations <- vector(mode = "list", length = 25L)
+for (i in 1:25) {
+  
+  # Load In The Random Forest Objects
+  final_random_forest_fit_ups <- iterations_ups$model[[i]]
+  rf_recipe <- iterations_ups$recipe[[i]]
+  
+  ### loading in each random forest fit and accompanying recipe
+  test_rec <- envt_prepped_ups
+  vars <- test_rec$var_info$variable
+  if (!identical(vars[!(vars %in% colnames(hoa_envt_covariates))], character(0))) {
+    stop("Not identical, variables are fucked")
+  }
+  
+  # Generating Normalised and Centred Covariates Using Previous Recipe
+  juiced_dji <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "dji", ])
+  juiced_eth <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "eth", ])
+  juiced_eri <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "eri", ])
+  juiced_sdn <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "sdn", ])
+  juiced_som <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "som", ])
 
-# Plotting as Non-Raster
-df_spat <- data.table(peaks = peaks, lon = juiced_HOA$lon, lat = juiced_HOA$lat, pred_one = predictions$.pred_one, log_pop = juiced_HOA$population_per_1km)
-DT_sf <- st_as_sf(df_spat, coords = c("lon", "lat"), crs = 4326)
-ggplot() +
-  geom_sf(data = DT_sf, aes(col = pred_one)) +
-  geom_sf(data = hoa_outline, col = "black", fill = NA, size = 1.2) +
-  scale_colour_gradient2(low = muted("red"),
-                         mid = "white",
-                         high = muted("blue"),
-                         midpoint = 0.5,
-                         limits = c(0, 1),
-                         space = "Lab",
-                         na.value = "grey50",
-                         guide = "colourbar",
-                         aesthetics = "colour")
+  # Making Country-Specific Rasters of Model Predictions to Then Stitch Together
+  dji_predictions <- predict(final_random_forest_fit_ups, juiced_dji, "prob")
+  dji_raster <- raster(ncol = dji$ncol[1], nrow = dji$nrow[1], ext = extent(dji_shp))
+  dji_raster[dji$cell] <- dji_predictions$.pred_one
+  dji_raster_plot <- as.data.frame(as(dji_raster, "SpatialPixelsDataFrame"))
+  dji_raster_plot$lat <- dji$lat
+  dji_raster_plot$lon <- dji$lon
+  
+  eth_predictions <- predict(final_random_forest_fit_ups, juiced_eth, "prob")
+  eth_raster <- raster(ncol = eth$ncol[1], nrow = eth$nrow[1], ext = extent(eth_shp))
+  eth_raster[eth$cell] <- eth_predictions$.pred_one
+  eth_raster_plot <- as.data.frame(as(eth_raster, "SpatialPixelsDataFrame"))
+  eth_raster_plot$lat <- eth$lat
+  eth_raster_plot$lon <- eth$lon
+  
+  eri_predictions <- predict(final_random_forest_fit_ups, juiced_eri, "prob")
+  eri_raster <- raster(ncol = eri$ncol[1], nrow = eri$nrow[1], ext = extent(eri_shp))
+  eri_raster[eri$cell] <- eri_predictions$.pred_one
+  eri_raster_plot <- as.data.frame(as(eri_raster, "SpatialPixelsDataFrame"))
+  eri_raster_plot$lat <- eri$lat
+  eri_raster_plot$lon <- eri$lon
+  
+  sdn_predictions <- predict(final_random_forest_fit_ups, juiced_sdn, "prob")
+  sdn_raster <- raster(ncol = sdn$ncol[1], nrow = sdn$nrow[1], ext = extent(sdn_shp))
+  sdn_raster[sdn$cell] <- sdn_predictions$.pred_one
+  sdn_raster_plot <- as.data.frame(as(sdn_raster, "SpatialPixelsDataFrame"))
+  sdn_raster_plot$lat <- sdn$lat
+  sdn_raster_plot$lon <- sdn$lon
+  
+  som_predictions <- predict(final_random_forest_fit_ups, juiced_som, "prob")
+  som_raster <- raster(ncol = som$ncol[1], nrow = som$nrow[1], ext = extent(som_shp))
+  som_raster[som$cell] <- som_predictions$.pred_one
+  som_raster_plot <- as.data.frame(as(som_raster, "SpatialPixelsDataFrame"))
+  som_raster_plot$lat <- som$lat
+  som_raster_plot$lon <- som$lon
+  
+  # Generating Empty Snap Raster To Stitch All The Countries Together
+  snap <- raster(resolution = c(0.09748167,0.09746483), xmn = 21, xmx = 60, ymn = -2, ymx = 25)
+  snap$layer <- NA
+  dji_file <- projectRaster(dji_raster, snap, method = "bilinear")
+  eth_file <- projectRaster(eth_raster, snap, method = "bilinear")
+  eri_file <- projectRaster(eri_raster, snap, method = "bilinear")
+  sdn_file <- projectRaster(sdn_raster, snap, method = "bilinear")
+  som_file <- projectRaster(som_raster, snap, method = "bilinear")
+  x <- list(dji_file, eth_file, eri_file, sdn_file, som_file)
+  x$fun <- mean
+  x$na.rm <- TRUE
+  x$tolerance <- 1
+  combined_raster <- do.call(merge, x)
+  
+  # Saving the Raster as a Dataframe and Into the Overall list
+  raster_plot <- as.data.frame(as(combined_raster, "SpatialPixelsDataFrame"))
+  raster_iterations[[i]] <- raster_plot
+  
+}
 
-# Plotting as Rasters
-dji_predictions <- predict(final_random_forest_fit_ups, juiced_HOA[1:length(dji$ISO), ], "prob")
-dji_raster <- raster(ncol = dji$ncol[1], nrow = dji$nrow[1], ext = extent(dji_shp))
-dji_raster[dji$cell] <- dji_predictions$.pred_one
-dji_raster_plot <- as.data.frame(as(dji_raster, "SpatialPixelsDataFrame"))
-dji_raster_plot$lat <- dji$lat
-dji_raster_plot$lon <- dji$lon
-
-eth_predictions <- predict(final_random_forest_fit_ups, juiced_HOA[(length(dji$ISO) + 1):(length(dji$ISO) + length(eth$ISO)), ], "prob")
-eth_raster <- raster(ncol = eth$ncol[1], nrow = eth$nrow[1], ext = extent(eth_shp))
-eth_raster[eth$cell] <- eth_predictions$.pred_one
-eth_raster_plot <- as.data.frame(as(eth_raster, "SpatialPixelsDataFrame"))
-eth_raster_plot$lat <- eth$lat
-eth_raster_plot$lon <- eth$lon
-
-eri_predictions <- predict(final_random_forest_fit_ups, juiced_HOA[(length(dji$ISO) + length(eth$ISO) + 1):(length(dji$ISO) + length(eth$ISO) + length(eri$ISO)), ], "prob")
-eri_raster <- raster(ncol = eri$ncol[1], nrow = eri$nrow[1], ext = extent(eri_shp))
-eri_raster[eri$cell] <- eri_predictions$.pred_one
-eri_raster_plot <- as.data.frame(as(eri_raster, "SpatialPixelsDataFrame"))
-eri_raster_plot$lat <- eri$lat
-eri_raster_plot$lon <- eri$lon
-
-sdn_predictions <- predict(final_random_forest_fit_ups, juiced_HOA[(length(dji$ISO) + length(eth$ISO) + length(eri$ISO) + 1):(length(dji$ISO) + length(eth$ISO) + length(eri$ISO) + length(sdn$ISO)), ], "prob")
-sdn_raster <- raster(ncol = sdn$ncol[1], nrow = sdn$nrow[1], ext = extent(sdn_shp))
-sdn_raster[sdn$cell] <- sdn_predictions$.pred_one
-sdn_raster_plot <- as.data.frame(as(sdn_raster, "SpatialPixelsDataFrame"))
-sdn_raster_plot$lat <- sdn$lat
-sdn_raster_plot$lon <- sdn$lon
-
-som_predictions <- predict(final_random_forest_fit_ups, juiced_HOA[(length(dji$ISO) + length(eth$ISO) + length(eri$ISO) + length(sdn$ISO) + 1):(length(dji$ISO) + length(eri$ISO) + length(eth$ISO) + length(sdn$ISO) + length(som$ISO)), ], "prob")
-som_raster <- raster(ncol = som$ncol[1], nrow = som$nrow[1], ext = extent(som_shp))
-som_raster[som$cell] <- som_predictions$.pred_one
-som_raster_plot <- as.data.frame(as(som_raster, "SpatialPixelsDataFrame"))
-som_raster_plot$lat <- som$lat
-som_raster_plot$lon <- som$lon
-
-snap <- raster(resolution = c(0.09748167,0.09746483), xmn = 21, xmx = 60, ymn = -2, ymx = 25)
-snap$layer <- NA
-dji_file <- projectRaster(dji_raster, snap, method = "bilinear")
-eth_file <- projectRaster(eth_raster, snap, method = "bilinear")
-eri_file <- projectRaster(eri_raster, snap, method = "bilinear")
-sdn_file <- projectRaster(sdn_raster, snap, method = "bilinear")
-som_file <- projectRaster(som_raster, snap, method = "bilinear")
-x <- list(dji_file, eth_file, eri_file, sdn_file, som_file)
-x$fun <- mean
-x$na.rm <- TRUE
-x$tolerance <- 1
-combined_raster <- do.call(merge, x)
-
+# Plotting the Output
 ken_shp <- st_as_sf(getData('GADM', country = 'KEN', level = 0, path = here("data/admin_units")))
 egy_shp <- st_as_sf(getData('GADM', country = 'EGY', level = 0, path = here("data/admin_units")))
 uga_shp <- st_as_sf(getData('GADM', country = 'UGA', level = 0, path = here("data/admin_units")))
@@ -185,12 +165,11 @@ yem_shp <- st_as_sf(getData('GADM', country = 'YEM', level = 0, path = here("dat
 uae_shp <- st_as_sf(getData('GADM', country = 'ARE', level = 0, path = here("data/admin_units")))
 oman_shp <- st_as_sf(getData('GADM', country = 'OMN', level = 0, path = here("data/admin_units")))
 qat_shp <- st_as_sf(getData('GADM', country = 'QAT', level = 0, path = here("data/admin_units")))
-
 hoa_neighbours <- rbind(ken_shp, egy_shp, uga_shp, drc_shp, ssd_shp, car_shp, uae_shp, oman_shp,
                         chad_shp, lib_shp, rwa_shp, tan_shp, bdi_shp, sda_shp, yem_shp, qat_shp)
 
-# lat and lon are wrong way round currently
-raster_plot <- as.data.frame(as(combined_raster, "SpatialPixelsDataFrame"))
+# taking the mean of the 25 individual rasters above - DO SOMETHING HERE
+
 fig5 <- ggplot() +
   geom_tile(data = raster_plot, aes(x = x, y = y, fill = layer)) +
   scale_fill_gradient2(low = muted("red"), mid = "white", high = muted("blue"),
@@ -210,5 +189,5 @@ fig5 <- ggplot() +
         legend.text = element_text(size = 11),
         legend.title = element_text(size = 13, face = "bold")) +
   guides(fill = guide_colourbar(title = "Prob.Single\nSeasonal Peak", ticks = FALSE))
-
-ggsave(filename = here("figures/Figure_5.pdf"), plot = fig5, width = 8, height = 8)
+fig5
+##ggsave(filename = here("figures/Figure_5.pdf"), plot = fig5, width = 8, height = 8)
