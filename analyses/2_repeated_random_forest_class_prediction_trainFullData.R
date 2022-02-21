@@ -35,6 +35,7 @@ overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
 overall <- overall %>%
   left_join(cluster_membership, by = "id")
+# table(overall$cluster, overall$peaks)
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -317,12 +318,9 @@ importance_upsample <- importance_upsample %>%
 importance_upsample$lower <- pmax(rep(0, length(importance_upsample$mean_Importance)), 
                                   importance_upsample$mean_Importance - 1.96 * importance_upsample$stdev_Importance)
 var_names_ups <- importance_upsample$Variable[order(importance_upsample$mean_Importance)]
-
-#### CHECK THESE NAMES ####
-var_names_ups # check this matches below
-new_names_ups <- c("Study\nfrom\nIndia", "LC180", "LC150", "LC130", "LC11", "Rain\nColdest\nQuarter", 
-                   "LC120", "LC20", "LC122", "LC10", "Rain.\nSeasonality", "LC110",
-                   "Temp.\nSeasonality", "LC30", "Study\nfrom\nIran", "Popn.\nPer\nKm2")
+new_names_ups <- c("Study\nfrom\nIndia", "LC130", "LC11", "LC150", "Rain\nColdest\nQuarter", 
+                   "LC180", "LC122", "Study\nfrom\nIran", "LC10", "LC120", "LC110", "LC20",
+                   "Temp.\nSeasonality","Rain.\nSeasonality", "LC30", "Popn.\nPer\nKm2") #### CHECK THESE NAMES ####
 importance_upsample_plot <- ggplot(importance_upsample, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                                                             fill = mean_Importance)) +
   geom_bar(stat = "identity") +
@@ -332,7 +330,7 @@ importance_upsample_plot <- ggplot(importance_upsample, aes(x = reorder(Variable
   scale_x_discrete(labels = new_names_ups) +
   scale_fill_continuous(low = "grey", high = "#E14545") +
   xlab("") + ylab("Variable Importance") +
-  lims(y = c(0, 0.064)) +
+  lims(y = c(0, 0.084)) +
   theme_bw() +
   theme(legend.position = "none",
         axis.text.x = element_text(size = 7))
@@ -443,7 +441,6 @@ figure3 <- cowplot::plot_grid(rf_plot, urban_rural_ts, nrow = 2, ncol = 1, rel_h
 figure3
 ggsave(filename = here("figures/Fig3_Overall.pdf"), plot = figure3, width = 12, height = 8)
 
-
 # Supplementary Figure - Upsample PDP and Covariate Profiling Plots
 ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds"))
 ups_vip_results <- tibble(id = 1, var = "bloop", x = 1, y = 1)
@@ -496,11 +493,10 @@ imp <- no_ups_df %>%
             stder_Importance = sd(Importance)/sqrt(n()))
 imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
 var_names <- imp$Variable[order(imp$mean_Importance)]
-### CHECK THESE NAMES
-new_names <- c("Study\nfrom\nIndia", "LC180", "LC150", "LC11", 
-               "Study\nfrom\nIran", "Temp.\nSeasonality", "LC130", "LC110",
-               "LC122", "LC120", "Rain\nColdest\nQuarter", "Rain.\nSeasonality",
-               "LC20", "LC30", "Population\nPer\nSquare Km", "LC10")
+new_names <- c("Study\nfrom\nIndia", "Study\nfrom\nIran", "LC11", "LC150", "LC180", 
+               "Temp.\nSeasonality","LC122", "LC110", "LC130",
+                "LC120", "Rain\nColdest\nQuarter", "LC20", "Rain.\nSeasonality",
+                "Population\nPer\nSquare Km", "LC10", "LC30") ### CHECK THESE NAMES
 importance_noUps_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                                          fill = mean_Importance)) +
   geom_bar(stat = "identity") +
@@ -510,7 +506,7 @@ importance_noUps_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance),
   scale_x_discrete(labels = new_names) +
   scale_fill_continuous(low = "grey", high = "#E14545") +
   xlab("") + ylab("Variable Importance") +
-  lims(y = c(0, 0.04)) +
+  lims(y = c(0, 0.065)) +
   theme_bw() +
   theme(legend.position = "none",
         axis.text.x = element_text(size = 7))
