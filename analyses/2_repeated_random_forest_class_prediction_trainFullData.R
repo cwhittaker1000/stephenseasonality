@@ -332,7 +332,7 @@ importance_upsample_plot <- ggplot(importance_upsample, aes(x = reorder(Variable
   scale_x_discrete(labels = new_names_ups) +
   scale_fill_continuous(low = "grey", high = "#E14545") +
   xlab("") + ylab("Variable Importance") +
-  lims(y = c(0, 0.084)) +
+  lims(y = c(0, 0.086)) +
   theme_bw() +
   theme(legend.position = "none",
         axis.text.x = element_text(size = 7))
