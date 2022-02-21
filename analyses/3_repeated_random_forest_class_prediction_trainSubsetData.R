@@ -35,6 +35,7 @@ overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
 overall <- overall %>%
   left_join(cluster_membership, by = "id")
+#table(overall$cluster, overall$peaks)
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -326,14 +327,11 @@ imp <- no_ups_df %>%
             num_times_inc = n())
 imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
 var_names <- imp$Variable[order(imp$mean_Importance)]
-
-#### CHECK THESE NAMES #####
-new_names <- c("LC180", "Study\nfrom\nIndia", "LC12", "LC150", 
-               "LC11", "Study\nfrom\nIran", "LC100", "LC130", "Temp.\nSeasonality", 
-               "LC122", "Rain\nColdest\nQuarter", "LC110", "Rain.\nDriest\nMonth", "LC120",
-               "Rain.\nSeasonality", "LC200", "LC20", "Rain.\nWarmest\nQuarter",
-               "Mean\nTemp.\nWettest\nQuarter", "LC201", "Rain.\nDriest\nQuarter", 
-               "LC40", "LC30", "Population\nPer\nSquare Km", "LC10")
+new_names <- c("Study\nfrom\nIndia", "LC12", "LC180", "LC150", 
+               "LC11", "Study\nfrom\nIran", "Temp.\nSeasonality", "LC122", "LC130", 
+               "Rain\nColdest\nQuarter", "LC110", "LC100", "Rain.\nDriest\nMonth", 
+               "Rain.\nSeasonality", "LC120", "LC20", "LC170", "LC200","LC201", 
+               "LC40", "Population\nPer\nSquare Km", "LC30", "LC10") #### CHECK THESE NAMES #####
 importance_noUps_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                                                     fill = mean_Importance)) +
   geom_bar(stat = "identity") +
@@ -373,14 +371,11 @@ imp <- ups_df %>%
             num_times_inc = n())
 imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
 var_names <- imp$Variable[order(imp$mean_Importance)]
-
-#### CHECK THESE NAMES #####
-new_names <- c("LC130", "LC100", "LC180", "LC12", "Study\nfrom\nIndia", 
-               "LC150", "Rain\nColdest\nQuarter", "LC11", "Rain.\nSeasonality",
-               "LC122", "LC20", "Mean\nTemp.\nWettest\nQuarter", "LC120", "LC40", "LC30",
-               "LC110", "Temp.\nSeasonality", "Study\nfrom\nIran", "Population\nPer\nSquare Km",
-               "LC200", "LC10", "Rain.\nDriest\nQuarter", "Rain.\nDriest\nMonth", 
-               "Rain.\nWarmest\nQuarter", "LC201")
+new_names <- c("LC12", "Study\nfrom\nIndia", "LC180", "LC130", "LC150", 
+               "LC11", "LC100", "Rain\nColdest\nQuarter", "Rain.\nSeasonality",
+               "LC122", "LC120", "LC20", "LC110", "LC200", "LC40",
+               "Temp.\nSeasonality", "Study\nfrom\nIran", "LC10", "LC170",
+               "Rain.\nDriest\nMonth","LC30", "Population\nPer\nSquare Km", "LC201") #### CHECK THESE NAMES ##### 
 importance_Ups_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                                                   fill = mean_Importance)) +
   geom_bar(stat = "identity") +
@@ -390,7 +385,7 @@ importance_Ups_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Imp
   scale_x_discrete(labels = new_names) +
   scale_fill_continuous(low = "grey", high = "#E14545") +
   xlab("") + ylab("Variable Importance") +
-  lims(y = c(0, 0.19)) +
+  lims(y = c(0, 0.23)) +
   theme_bw() +
   theme(legend.position = "none",
         axis.text.x = element_text(size = 7))
@@ -398,6 +393,3 @@ importance_Ups_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Imp
 Ups_Supp_Plot_SubsetData <- cowplot::plot_grid(ups_subset_AUC, importance_Ups_SubsetData_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
 subset_data_plot <- cowplot::plot_grid(noUps_Supp_Plot_SubsetData, Ups_Supp_Plot_SubsetData, nrow  = 2)
 ggsave(filename = here("figures/Supp_Figure_Subset_AUC_VIP.pdf"), plot = subset_data_plot, width = 16, height = 10)
-
-
-
