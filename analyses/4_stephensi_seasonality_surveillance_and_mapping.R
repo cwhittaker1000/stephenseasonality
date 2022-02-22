@@ -14,7 +14,7 @@ sdn <- read.csv("data/environmental_covariates/SDN_environment_data.csv") %>%
   mutate(country = "aOther")
 som <- read.csv("data/environmental_covariates/SOM_environment_data.csv") %>%
   mutate(country = "aOther")
-hoa_covariates_raw <- rbindlist(list(dji, eth, eri, sdn, som), fill = TRUE)
+hoa_covariates_raw <- data.table::rbindlist(list(dji, eth, eri, sdn, som), fill = TRUE)
 country_vector <- c(rep("dji", dim(dji)[1]), rep("eth", dim(eth)[1]), rep("eri", dim(eri)[1]), rep("sdn", dim(sdn)[1]), rep("som", dim(som)[1]))
 
 # Loading in geographical data (shapefiles) for each country
@@ -76,7 +76,7 @@ for (i in 1:25) {
   
   # Load In The Random Forest Objects
   final_random_forest_fit_ups <- iterations_ups$model[[i]]
-  rf_recipe <- iterations_ups$recipe[[i]]
+  rf_recipe <- iterations_ups$recipe
   
   ### loading in each random forest fit and accompanying recipe
   test_rec <- envt_prepped_ups

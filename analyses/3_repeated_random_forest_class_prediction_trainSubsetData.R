@@ -278,7 +278,7 @@ for (i in 1:number_iterations) {
   iterations_ups[i, "test_one_peak_accuracy"] <- test_one_peak_accuracy_ups
   iterations_ups[i, "test_two_peak_accuracy"] <- test_two_peak_accuracy_ups
   iterations_ups[i, "importance"] <- list(list(var_imp_ups))
-  iterations[i, "recipe"] <- list(list(envt_prepped_ups))
+  iterations_ups[i, "recipe"] <- list(list(envt_prepped_ups))
   
   print(paste0("Iteration ", i, " - Seed is ", seed))
   
