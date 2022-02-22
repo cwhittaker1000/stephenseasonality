@@ -74,23 +74,20 @@ iterations_ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_
 raster_iterations <- vector(mode = "list", length = 25L)
 for (i in 1:25) {
   
-  # Load In The Random Forest Objects
+  # Load In The Random Forest Objects and Check Variables
   final_random_forest_fit_ups <- iterations_ups$model[[i]]
-  rf_recipe <- iterations_ups$recipe
-  
-  ### loading in each random forest fit and accompanying recipe
-  test_rec <- envt_prepped_ups
-  vars <- test_rec$var_info$variable
+  rf_recipe <- iterations_ups$recipe[[i]]
+  vars <- rf_recipe$var_info$variable
   if (!identical(vars[!(vars %in% colnames(hoa_envt_covariates))], character(0))) {
     stop("Not identical, variables are fucked")
   }
   
   # Generating Normalised and Centred Covariates Using Previous Recipe
-  juiced_dji <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "dji", ])
-  juiced_eth <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "eth", ])
-  juiced_eri <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "eri", ])
-  juiced_sdn <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "sdn", ])
-  juiced_som <- bake(object = test_rec, new_data = hoa_envt_covariates[country_vector == "som", ])
+  juiced_dji <- bake(object = rf_recipe, new_data = hoa_envt_covariates[country_vector == "dji", ])
+  juiced_eth <- bake(object = rf_recipe, new_data = hoa_envt_covariates[country_vector == "eth", ])
+  juiced_eri <- bake(object = rf_recipe, new_data = hoa_envt_covariates[country_vector == "eri", ])
+  juiced_sdn <- bake(object = rf_recipe, new_data = hoa_envt_covariates[country_vector == "sdn", ])
+  juiced_som <- bake(object = rf_recipe, new_data = hoa_envt_covariates[country_vector == "som", ])
 
   # Making Country-Specific Rasters of Model Predictions to Then Stitch Together
   dji_predictions <- predict(final_random_forest_fit_ups, juiced_dji, "prob")
@@ -144,9 +141,13 @@ for (i in 1:25) {
   
   # Saving the Raster as a Dataframe and Into the Overall list
   raster_plot <- as.data.frame(as(combined_raster, "SpatialPixelsDataFrame"))
+  raster_plot$id <- i
   raster_iterations[[i]] <- raster_plot
   
+  print(i)
+  
 }
+saveRDS(raster_iterations, file = here("outputs", "seasonality_prediction", "simple_random_forest_seasonality_prediction.rds"))
 
 # Plotting the Output
 ken_shp <- st_as_sf(getData('GADM', country = 'KEN', level = 0, path = here("data/admin_units")))
@@ -168,10 +169,12 @@ qat_shp <- st_as_sf(getData('GADM', country = 'QAT', level = 0, path = here("dat
 hoa_neighbours <- rbind(ken_shp, egy_shp, uga_shp, drc_shp, ssd_shp, car_shp, uae_shp, oman_shp,
                         chad_shp, lib_shp, rwa_shp, tan_shp, bdi_shp, sda_shp, yem_shp, qat_shp)
 
-# taking the mean of the 25 individual rasters above - DO SOMETHING HERE
-
-fig5 <- ggplot() +
-  geom_tile(data = raster_plot, aes(x = x, y = y, fill = layer)) +
+# Average Over the Random Forest Outputs
+all_rasters <- bind_rows(raster_iterations) %>% # alt: all_rasters <- do.call("rbind", raster_iterations)
+  group_by(x, y) %>%
+  summarise(layer = mean(layer, na.rm = TRUE))
+fig4a <- ggplot() +
+  geom_tile(data = all_rasters, aes(x = x, y = y, fill = layer)) +
   scale_fill_gradient2(low = muted("red"), mid = "white", high = muted("blue"),
                        midpoint = 0.5, limits = c(0, 1), space = "Lab",
                        na.value = "grey50", guide = "colourbar") +
@@ -189,5 +192,3 @@ fig5 <- ggplot() +
         legend.text = element_text(size = 11),
         legend.title = element_text(size = 13, face = "bold")) +
   guides(fill = guide_colourbar(title = "Prob.Single\nSeasonal Peak", ticks = FALSE))
-fig5
-##ggsave(filename = here("figures/Figure_5.pdf"), plot = fig5, width = 8, height = 8)
