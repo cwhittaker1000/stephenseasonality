@@ -178,7 +178,10 @@ all_rasters <- bind_rows(raster_iterations) %>% # alt: all_rasters <- do.call("r
   summarise(layer = mean(layer, na.rm = TRUE))
 fig4a <- ggplot() +
   geom_tile(data = all_rasters, aes(x = x, y = y, fill = layer)) +
-  scale_fill_gradient2(low = muted("red"), mid = "white", high = muted("blue"),
+  # scale_fill_gradient2(low = muted("red"), mid = "white", high = muted("blue"),
+  #                      midpoint = 0.5, limits = c(0, 1), space = "Lab",
+  #                      na.value = "grey50", guide = "colourbar") +
+  scale_fill_gradient2(low = palette()[1], mid = "white", high = palette()[2],
                        midpoint = 0.5, limits = c(0, 1), space = "Lab",
                        na.value = "grey50", guide = "colourbar") +
   geom_sf(data = hoa_neighbours, col = gray(0.6), fill = gray(0.90), size = 1) +
@@ -191,24 +194,31 @@ fig4a <- ggplot() +
         axis.title = element_text(size = 14, face = "bold"), 
         axis.title.x = element_blank(), 
         axis.title.y = element_blank(),
-        legend.position = "right", 
+        legend.position = "bottom", 
         legend.text = element_text(size = 11),
-        legend.title = element_text(size = 13, face = "bold")) +
-  guides(fill = guide_colourbar(title = "Prob.Single\nSeasonal Peak", ticks = FALSE))
-
+        legend.title = element_text(size = 11, face = "bold")) +
+  guides(fill = guide_colourbar(title = "Seasonality", ticks = FALSE))
 
 # Annual Catch Figures Describing Seasonality 
-fig4b <- ggplot(ts_metadata, aes(x = 100 * per_ind_4_months)) +
-  geom_histogram(bins = 8, fill = "#9BC4CB", colour = "#e9ecef") +
+cluster <- readRDS(here("data", "systematic_review_results", "cluster_membership.rds"))
+mean_one <- mean(ts_metadata$per_ind_4_months[cluster$cluster == 1])
+mean_two <- mean(ts_metadata$per_ind_4_months[cluster$cluster == 2])
+fig4b <- ggplot(ts_metadata, aes(x = 100 * per_ind_4_months, fill = factor(peaks))) +
+  geom_histogram(bins = 10, colour = "dark grey", position = "identity", alpha = 0.4) +
   theme_bw() +
-  labs(fill = "", x = "% of Annual Vector Catch Caught In 4 Months", y = "Number of Studies")
-
+  geom_segment(x = 100 * mean_one, xend = 100 * mean_one, y = 0, yend = 17, size = 1, col = palette()[2], linetype = "dashed") +
+  geom_segment(x = 100 * mean_two, xend = 100 * mean_two, y = 0, yend = 17, size = 1, col = palette()[1], linetype = "dashed") + 
+  scale_fill_manual(values = palette()[2:1]) + 
+  scale_x_continuous(breaks = seq(30, 100, 10)) +
+  labs(fill = "Cluster", x = "% of Annual Catch In 4 Months", y = "Number of Studies") +
+  theme(legend.position = "left")
 
 # Extracting Mean Realisations
 id <- overall$id
 interpolating_points <- 2
 prior <- "informative"
 mean_realisation <- matrix(nrow = length(id), ncol = (12 * interpolating_points + 1))
+overdisp <- vector(mode = "numeric",length = length(id))
 for (i in 1:length(id)) {
   
   index <- id[i]
@@ -229,15 +239,33 @@ for (i in 1:length(id)) {
   f_mean <- apply(f, 2, mean)
   negbinom_intensity_mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
   mean_realisation[i, ] <- negbinom_intensity_mean
+  overdisp[i] <- mean(MCMC_output[, "overdispersion"])
 }
 
+# Annual Surveillance Considerations - Probability of Detecting Stephensi If Catches Only Done In X Months
 normalised_output <- t(apply(mean_realisation, 1, normalise_total))
-summary_probs <- array(dim = c(length(id), 12, 3))
+
+# Reordering mean fitted time-series to start at max
+reordered_mean_realisation <- matrix(nrow = length(id), ncol = (12 * interpolating_points + 1))
+start_index <- apply(normalised_output, 1, function(x) which(x == max(x)))
+end_index <- dim(reordered_mean_realisation)[2]
+for (i in 1:length(id)) {
+  reordered_mean_realisation[i, ] <- normalised_output[i, c(start_index[i]:end_index, 1:(start_index[i]-1))]
+}
+one_output <- reordered_mean_realisation[cluster_membership$cluster == 1, ]
+mean_one_output <- apply(one_output, 2, mean)
+
+two_output <- reordered_mean_realisation[cluster_membership$cluster == 2, ]
+mean_two_output <- apply(two_output, 2, mean)
+
+aug_norm_output <- rbind(normalised_output, mean_one_output, mean_two_output)
+
+summary_probs <- array(dim = c(length(id) + 2, 12, 3))
 p_overall <- 1
-for (k in 1:65) {
+for (k in 1:67) {
   
   # Generating Monthly Relative Probabilities of Finding Stephensi and Multiplying By Defined Overall Prob Detection Given Present
-  time_series <- normalised_output[k, ]
+  time_series <- aug_norm_output[k, ]
   avg_month_prob <- vector(mode = "numeric", length = 12L)
   counter <- 1
   for (i in 1:length(avg_month_prob)) {
@@ -271,15 +299,19 @@ for (k in 1:65) {
   print(k)
 }
 
-lower_probs <- summary_probs[, , 1]
-median_probs <- summary_probs[, , 2]
-upper_probs <- summary_probs[, , 3]
+lower_probs <- summary_probs[1:65, , 1]
+median_probs <- summary_probs[1:65, , 2]
+upper_probs <- summary_probs[1:65, , 3]
+
+cluster_one_median <- data.frame(time = seq(1, 12), median = summary_probs[66, , 2], lower = summary_probs[66, , 1], upper = summary_probs[66, , 3])
+cluster_two_median <- data.frame(time = seq(1, 12), median = summary_probs[67, , 2], lower = summary_probs[67, , 1], upper = summary_probs[67, , 3])
 
 median_summary <- data.frame(id = rep(id, 3), stat = c(rep("med", 65), rep("low", 65), rep("high", 65)),
+                             cluster = rep(cluster_membership$cluster, each = 3), 
                              rbind(median_probs, lower_probs, upper_probs)) %>%
   pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
   mutate(time = as.numeric(gsub("X", "", time))) %>%
-  group_by(time, stat) %>%
+  group_by(time, stat, cluster) %>%
   summarise(median = median(prob),
             lower = min(prob),
             upper = max(prob)) %>%
@@ -289,50 +321,194 @@ medians <- data.frame(id = id, median_probs) %>%
   pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
   mutate(time = as.numeric(gsub("X", "", time)))
 
-ggplot(median_summary) +
-  geom_path(aes(x = time, y = median_med)) +
-  geom_path(data = medians, aes(x = time, y = prob, group = id), alpha = 0.2) +
-  geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med), alpha = 0.2) +
+fig4c <- ggplot(median_summary) +
+  geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med, fill = factor(cluster)), alpha = 0.1) +
+  geom_path(aes(x = time, y = median_med, colour = factor(cluster)), size = 1) +
   scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
-  labs(y = "Probability of Missing Anopheles Stephensi",
-       x = "Number of Months Sampled")
+  scale_fill_manual(values = palette()[2:1]) + 
+  scale_colour_manual(values = palette()[2:1]) + 
+  labs(y = "Probability of Missing Anopheles Stephensi", x = "Number of Consecutive Months Sampled") +
+  theme_bw() +
+  theme(legend.position = "none")
 
-alt_summary <- data.frame(id = rep(id, 3), rbind(median_probs, lower_probs, upper_probs)) %>%
-  pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
-  mutate(time = as.numeric(gsub("X", "", time))) %>%
-  group_by(time) %>%
-  summarise(median = median(prob),
-            lower = min(prob),
-            upper = max(prob)) 
-ggplot(alt_summary) +
-  geom_path(aes(x = time, y = median)) +
-  geom_ribbon(aes(x = time, ymin = lower, ymax = upper), alpha = 0.2) +
-  scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
-  labs(y = "Probability of Missing Anopheles Stephensi",
-       x = "Number of Months Sampled")
+#fig4c <- ggplot(median_summary) +
+  #geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med), fill = "dark grey", alpha = 0.2) +
+  #geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med), fill = "#70798C", alpha = 0.2) +
+  #geom_path(aes(x = time, y = median_med), size = 1, colour = "#70798C") +
+  # geom_path(data = cluster_one_median, aes(x = time, y = median), colour = palette()[2], size = 1) +
+  # geom_ribbon(data = cluster_one_median, aes(x = time, ymin = lower, ymax = upper), fill = palette()[2], alpha = 0.2) +
+  # geom_path(data = cluster_two_median, aes(x = time, y = median), colour = palette()[1], size = 1) +
+  # geom_ribbon(data = cluster_two_median, aes(x = time, ymin = lower, ymax = upper), fill = palette()[1], alpha = 0.2) +
+  # geom_path(data = medians, aes(x = time, y = prob, group = id), alpha = 0.2) +
+  # scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
+  # scale_y_continuous(limits = c(0, 1)) +
+  # labs(y = "Probability of Missing Anopheles Stephensi", x = "Number of Consecutive Months Sampled") +
+  # theme_bw()
 
+fig4subset <- cowplot::plot_grid(fig4b, fig4c, ncol = 1)
+fig4overall <- cowplot::plot_grid(fig4subset, fig4a, rel_widths = c(1, 1.3)) ## 9.5 * 6.25 (h x w)
 
+fig4b <- fig4b +
+  theme(legend.position = "right")
+fig4a <- fig4a +
+  theme(legend.position = c(0.85, 0.80))
+fig4subset <- cowplot::plot_grid(fig4b, fig4c, ncol = 1, align = "v", axis = "l")
+fig4overall <- cowplot::plot_grid(fig4a, fig4subset, rel_widths = c(1.25, 1)) ## 9.5 * 6.25 (h x w)
+ggsave(fig4overall, file = here("figures", "Fig4_Overall.pdf"), width = 9.5, height = 6.15)
 
-# ggplot(median_summary) +
-#   geom_path(aes(x = time, y = median_med), size = 1) +
-#   geom_path(data = medians, aes(x = time, y = prob, group = id), alpha = 0.2) +
-#   geom_ribbon(aes(x = time, ymin = lower_low, ymax = upper_high), alpha = 0.2) +
+######################################################################
+######################################################################
+
+# alt_summary <- data.frame(id = rep(id, 3), rbind(median_probs, lower_probs, upper_probs)) %>%
+#   pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
+#   mutate(time = as.numeric(gsub("X", "", time))) %>%
+#   group_by(time) %>%
+#   summarise(median = median(prob),
+#             lower = min(prob),
+#             upper = max(prob)) 
+# alt_summary_plot <- ggplot(alt_summary) +
+#   geom_path(aes(x = time, y = median)) +
+#   geom_ribbon(aes(x = time, ymin = lower, ymax = upper), alpha = 0.2) +
 #   scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
-#   labs(y = "Probability of Missing Anopheles Stephensi", x = "Number of Months Sampled") +
-#   theme_bw()
-
-
-for (i in 1:65) {
-  if (i == 1) {
-    plot(summary_probs[i, , 1], type = "l", ylim = c(0, 1))
-  } else {
-    lines(summary_probs[i, , 2])
-    lines(summary_probs[i, , 1], col = "red")
-    lines(summary_probs[i, , 3], col = "red")
-  }
-}
-
-
-
-
-
+#   labs(y = "Probability of Missing Anopheles Stephensi",
+#        x = "Number of Months Sampled")
+# 
+# # Monthly Surveillance Considerations
+# unsmoothed_counts <- readRDS(here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds")) %>%
+#   dplyr::select(id, Jan:Dec) %>%
+#   pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "catch") %>%
+#   group_by(id) %>%
+#   summarise(num_months = sum(!is.na(catch)),
+#             total_catch = sum(catch, na.rm = TRUE),
+#             avg_catch = total_catch/num_months)
+# 
+# overdisp_df <- data.frame(overdisp = overdisp, catch = log(unsmoothed_counts$avg_catch))
+# 
+# linear_with_int <- glm(overdisp ~ catch, data = overdisp_df)
+# linear_int_coefs <- coef(linear_with_int)
+# 
+# linear_no_int <- glm(overdisp ~ 0 + catch, data = overdisp_df)
+# linear_no_coefs <- coef(linear_no_int)
+# 
+# test_catches <- seq(0, 10, 1)
+# plot(log(unsmoothed_counts$avg_catch), overdisp, ylim = c(0, 6), xlim = c(0, 6.5))
+# lines(test_catches, linear_int_coefs[1] + linear_int_coefs[2] * test_catches)
+# lines(test_catches, linear_no_coefs[1] * test_catches, col = "red")
+# 
+# perc <- c(0.01, 0.05, 0.1, 0.2, 0.5, 1)
+# catch <- c(5, 10, 25, 50, 100, 200, 500)
+# 
+# mean(unsmoothed_counts$avg_catch)
+# median(unsmoothed_counts$avg_catch)
+# 
+# inputs <- data.frame(catch = log(catch))
+# with_int_preds <- predict(linear_with_int, inputs)
+# no_int_preds <- predict(linear_no_int, inputs)
+# probs <- array(dim = c(length(perc), length(catch), 2)) # rows = catch size, cols = % pop = stephensi
+# for (i in 1:length(perc)) {
+#   for (j in 1:length(catch)) {
+#     probs[i, j, 1] <- 1 - dnbinom(0, mu = perc[i] * catch[j], size = no_int_preds[j])
+#     probs[i, j, 2] <- 1 - dnbinom(0, mu = perc[i] * catch[j], size = with_int_preds[j])
+#   }
+# }
+# 
+# dnbinom(0, mu = 1, size = 3)
+# dnbinom(0, mu = 1, size = 0.5)
+# 
+# x <- probs[, , 1]
+# y <- probs[, , 2]
+# 
+# temp_rest <- rnbinom(25000, mu = 99, size = no_int_preds[1])
+# 
+# 
+# inputs <- data.frame(catch = c(1, 2, 3, 5))
+# with_int_preds <- predict(linear_with_int, inputs)
+# no_int_preds <- predict(linear_no_int, inputs)
+# 
+# prop_overall_population <- 0.01
+# 
+# x <- data.frame(catch = seq(1, 100000, 1))
+# y <- predict(linear_with_int, log(x))
+# preds <- dnbinom(0, mu = x$catch, size = y)
+# plot(log(x$catch), preds, type = "l", ylim = c(0, 1))
+# 
+# x <- data.frame(catch = seq(1, 100000, 1))
+# y <- predict(linear_no_int, log(x))
+# preds <- dnbinom(0, mu = x$catch, size = y)
+# lines(log(x$catch), preds, col = "red")
+# 
+# 
+# 
+# 
+# 
+# 
+# num <- 25000
+# mu <- c(10, 100, 1000, 100000)
+# ind <- vector(mode = "numeric", length = 3L)
+# par(mfrow = c(1, 2))
+# for (i in 1:4) {
+#   temp <- rnbinom(num, mu = mu[i], size = no_int_preds[i])
+#   ordered_temp <- temp[rev(order(temp))]
+#   summed_temp <- vector(mode = "numeric", length = num)
+#   for (j in 1:num) {
+#     summed_temp[j] <- sum(ordered_temp[1:j])/sum(ordered_temp)
+#   }
+#   if (i == 1) {
+#     plot(summed_temp, type = "l")
+#   } else {
+#     lines(summed_temp, type = "l")
+#   }
+#   temp_ind <- which(abs(summed_temp - 0.8) == min(abs((summed_temp - 0.8))))
+#   ind[i] <- temp_ind/num
+# }
+# 
+# test <- rnbinom(num, mu = 100, size = 3.34)
+# #hist(test)
+# ordered_test <- test[rev(order(test))]
+# summed <- vector(mode = "numeric", length = num)
+# for (i in 1:num) {
+#   summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
+# }
+# plot(summed)
+# 
+# 
+# x <- seq(0, 1, 0.001)
+# plot(qnbinom(x, mu = 100, size = 1.93), x)
+# 
+# test <- rnbinom(10000, mu = 100, size = 3.34)
+# hist(test)
+# ordered_test <- test[rev(order(test))]
+# 
+# a <- ecdf(ordered_test)
+# plot(a)
+# quantile(a, 0.8)
+# 
+# par(mfrow = c(1, 2))
+# num <- 10000
+# test <- rnbinom(num, mu = 100, size = 3.34)
+# #hist(test)
+# ordered_test <- test[rev(order(test))]
+# summed <- vector(mode = "numeric", length = num)
+# for (i in 1:num) {
+#   summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
+# }
+# plot(summed)
+# 
+# test <- rnbinom(num, mu = 100, size = 0.5)
+# #hist(test)
+# ordered_test <- test[rev(order(test))]
+# summed <- vector(mode = "numeric", length = num)
+# for (i in 1:num) {
+#   summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
+# }
+# ind <- which((summed - 0.8) == min(abs((summed - 0.8))))
+# 
+# ind/num
+# 
+# 
+# pnorm(1.96, 0, 1)
+# qnorm(0.975, 0, 1) # qnorm = CFDF
+# 
+# rnbinom(1, mu = 1, size = 4)
+# 
+# hist(rnbinom(10000, mu = 10, size = 2))
