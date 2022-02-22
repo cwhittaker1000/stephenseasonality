@@ -1,7 +1,10 @@
 # Loading Required Libraries
 library(tidyverse); library(sf); library(tidymodels)
 library(sp); library(raster); library(rgeos); library(rgdal); library(maptools); library(dplyr); 
-library(tidyr); library(maps);library(scales); library(here) 
+library(tidyr); library(maps);library(scales); library(here); library(zoo)
+
+# Loading in custom functions
+source(here("functions", "time_series_characterisation_functions.R"))
 
 # Loading in ecological covariate data for each country
 dji <- read.csv("data/environmental_covariates/DJI_environment_data.csv") %>%
@@ -192,3 +195,144 @@ fig4a <- ggplot() +
         legend.text = element_text(size = 11),
         legend.title = element_text(size = 13, face = "bold")) +
   guides(fill = guide_colourbar(title = "Prob.Single\nSeasonal Peak", ticks = FALSE))
+
+
+# Annual Catch Figures Describing Seasonality 
+fig4b <- ggplot(ts_metadata, aes(x = 100 * per_ind_4_months)) +
+  geom_histogram(bins = 8, fill = "#9BC4CB", colour = "#e9ecef") +
+  theme_bw() +
+  labs(fill = "", x = "% of Annual Vector Catch Caught In 4 Months", y = "Number of Studies")
+
+
+# Extracting Mean Realisations
+id <- overall$id
+interpolating_points <- 2
+prior <- "informative"
+mean_realisation <- matrix(nrow = length(id), ncol = (12 * interpolating_points + 1))
+for (i in 1:length(id)) {
+  
+  index <- id[i]
+  
+  # Loading in and processing the fitted time-series
+  if (prior == "informative") {
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", index, ".rds"))
+  } else if (prior == "uninformative") {
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/uninformative/"), "/uninf_periodic_fit_", index, ".rds"))
+  }  
+  
+  # Extracting the mean fitted time-series
+  timepoints <- STAN_output$timepoints
+  all_timepoints <- STAN_output$all_timepoints
+  ordered_timepoints <- all_timepoints[order(all_timepoints)]
+  MCMC_output <- STAN_output$chain_output
+  f <- MCMC_output[, grepl("f", colnames(MCMC_output))]
+  f_mean <- apply(f, 2, mean)
+  negbinom_intensity_mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
+  mean_realisation[i, ] <- negbinom_intensity_mean
+}
+
+normalised_output <- t(apply(mean_realisation, 1, normalise_total))
+summary_probs <- array(dim = c(length(id), 12, 3))
+p_overall <- 1
+for (k in 1:65) {
+  
+  # Generating Monthly Relative Probabilities of Finding Stephensi and Multiplying By Defined Overall Prob Detection Given Present
+  time_series <- normalised_output[k, ]
+  avg_month_prob <- vector(mode = "numeric", length = 12L)
+  counter <- 1
+  for (i in 1:length(avg_month_prob)) {
+    if (i < 12) {
+      avg_month_prob[i] <- mean(time_series[c(counter, counter + 1)])
+      counter <- counter + 2
+    } else {
+      avg_month_prob[i] <- mean(time_series[c(counter, counter + 1, counter + 2)])
+      counter <- counter + 2
+    }
+  }
+  p_zero_caught <- 1 - (avg_month_prob/max(avg_month_prob) * p_overall) # option1 <- Alt = 1 - (test * 0.5)
+  
+  # Iterating Over All Possible Start Months and All Possible Number of Consecutive Months Sampled
+  #   rows are the month we start at
+  #   columns are the number of months we consider
+  prob_matrix <- matrix(data = NA, nrow = 12, ncol = 12)
+  for (i in 1:12) {
+    for (j in 1:12) {
+      if ((i+j-1) > 12) {
+        indices <- c(i:12, 1:(j - length(i:12)))
+      } else {
+        indices <- i:(i+j-1)
+      }
+      temp_p <- prod(p_zero_caught[indices])
+      prob_matrix[i, j] <- temp_p
+    }
+  }
+  temp_median_prob <- apply(prob_matrix, 2, quantile, prob = c(0.25, 0.5, 0.75))
+  summary_probs[k, , ] <- t(temp_median_prob)
+  print(k)
+}
+
+lower_probs <- summary_probs[, , 1]
+median_probs <- summary_probs[, , 2]
+upper_probs <- summary_probs[, , 3]
+
+median_summary <- data.frame(id = rep(id, 3), stat = c(rep("med", 65), rep("low", 65), rep("high", 65)),
+                             rbind(median_probs, lower_probs, upper_probs)) %>%
+  pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
+  mutate(time = as.numeric(gsub("X", "", time))) %>%
+  group_by(time, stat) %>%
+  summarise(median = median(prob),
+            lower = min(prob),
+            upper = max(prob)) %>%
+  pivot_wider(names_from = "stat", 
+              values_from = median:upper)#
+medians <- data.frame(id = id, median_probs) %>%
+  pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
+  mutate(time = as.numeric(gsub("X", "", time)))
+
+ggplot(median_summary) +
+  geom_path(aes(x = time, y = median_med)) +
+  geom_path(data = medians, aes(x = time, y = prob, group = id), alpha = 0.2) +
+  geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med), alpha = 0.2) +
+  scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
+  labs(y = "Probability of Missing Anopheles Stephensi",
+       x = "Number of Months Sampled")
+
+alt_summary <- data.frame(id = rep(id, 3), rbind(median_probs, lower_probs, upper_probs)) %>%
+  pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
+  mutate(time = as.numeric(gsub("X", "", time))) %>%
+  group_by(time) %>%
+  summarise(median = median(prob),
+            lower = min(prob),
+            upper = max(prob)) 
+ggplot(alt_summary) +
+  geom_path(aes(x = time, y = median)) +
+  geom_ribbon(aes(x = time, ymin = lower, ymax = upper), alpha = 0.2) +
+  scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
+  labs(y = "Probability of Missing Anopheles Stephensi",
+       x = "Number of Months Sampled")
+
+
+
+# ggplot(median_summary) +
+#   geom_path(aes(x = time, y = median_med), size = 1) +
+#   geom_path(data = medians, aes(x = time, y = prob, group = id), alpha = 0.2) +
+#   geom_ribbon(aes(x = time, ymin = lower_low, ymax = upper_high), alpha = 0.2) +
+#   scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
+#   labs(y = "Probability of Missing Anopheles Stephensi", x = "Number of Months Sampled") +
+#   theme_bw()
+
+
+for (i in 1:65) {
+  if (i == 1) {
+    plot(summary_probs[i, , 1], type = "l", ylim = c(0, 1))
+  } else {
+    lines(summary_probs[i, , 2])
+    lines(summary_probs[i, , 1], col = "red")
+    lines(summary_probs[i, , 3], col = "red")
+  }
+}
+
+
+
+
+
