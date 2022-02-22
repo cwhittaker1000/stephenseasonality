@@ -381,7 +381,7 @@ ggsave(fig4overall, file = here("figures", "Fig4_Overall.pdf"), width = 9.5, hei
 #   summarise(num_months = sum(!is.na(catch)),
 #             total_catch = sum(catch, na.rm = TRUE),
 #             avg_catch = total_catch/num_months)
-# 
+# # 
 # overdisp_df <- data.frame(overdisp = overdisp, catch = log(unsmoothed_counts$avg_catch))
 # 
 # linear_with_int <- glm(overdisp ~ catch, data = overdisp_df)
@@ -419,14 +419,6 @@ ggsave(fig4overall, file = here("figures", "Fig4_Overall.pdf"), width = 9.5, hei
 # y <- probs[, , 2]
 # 
 # temp_rest <- rnbinom(25000, mu = 99, size = no_int_preds[1])
-# 
-# 
-# inputs <- data.frame(catch = c(1, 2, 3, 5))
-# with_int_preds <- predict(linear_with_int, inputs)
-# no_int_preds <- predict(linear_no_int, inputs)
-# 
-# prop_overall_population <- 0.01
-# 
 # x <- data.frame(catch = seq(1, 100000, 1))
 # y <- predict(linear_with_int, log(x))
 # preds <- dnbinom(0, mu = x$catch, size = y)
@@ -437,17 +429,15 @@ ggsave(fig4overall, file = here("figures", "Fig4_Overall.pdf"), width = 9.5, hei
 # preds <- dnbinom(0, mu = x$catch, size = y)
 # lines(log(x$catch), preds, col = "red")
 # 
-# 
-# 
-# 
-# 
-# 
+# inputs <- data.frame(catch = c(log(10), log(100), log(1000)))
+# with_int_preds <- predict(linear_with_int, inputs)
+# no_int_preds <- predict(linear_no_int, inputs)
 # num <- 25000
-# mu <- c(10, 100, 1000, 100000)
+# mu <- c(10, 100, 1000)
 # ind <- vector(mode = "numeric", length = 3L)
 # par(mfrow = c(1, 2))
-# for (i in 1:4) {
-#   temp <- rnbinom(num, mu = mu[i], size = no_int_preds[i])
+# for (i in 1:3) {
+#   temp <- rnbinom(num, mu = mu[i], size = with_int_preds[i])
 #   ordered_temp <- temp[rev(order(temp))]
 #   summed_temp <- vector(mode = "numeric", length = num)
 #   for (j in 1:num) {
@@ -462,6 +452,11 @@ ggsave(fig4overall, file = here("figures", "Fig4_Overall.pdf"), width = 9.5, hei
 #   ind[i] <- temp_ind/num
 # }
 # 
+# hist(rnbinom(num, mu = 100, size = 0.5))
+# 
+# pnbinom(100, mu = 100, size = 0.1)
+# pnbinom(1000, mu = 1000, size = 4.195157)
+# 
 # test <- rnbinom(num, mu = 100, size = 3.34)
 # #hist(test)
 # ordered_test <- test[rev(order(test))]
@@ -470,45 +465,45 @@ ggsave(fig4overall, file = here("figures", "Fig4_Overall.pdf"), width = 9.5, hei
 #   summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
 # }
 # plot(summed)
-# 
-# 
-# x <- seq(0, 1, 0.001)
-# plot(qnbinom(x, mu = 100, size = 1.93), x)
-# 
-# test <- rnbinom(10000, mu = 100, size = 3.34)
-# hist(test)
-# ordered_test <- test[rev(order(test))]
-# 
-# a <- ecdf(ordered_test)
-# plot(a)
-# quantile(a, 0.8)
-# 
-# par(mfrow = c(1, 2))
-# num <- 10000
-# test <- rnbinom(num, mu = 100, size = 3.34)
-# #hist(test)
-# ordered_test <- test[rev(order(test))]
-# summed <- vector(mode = "numeric", length = num)
-# for (i in 1:num) {
-#   summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
-# }
-# plot(summed)
-# 
-# test <- rnbinom(num, mu = 100, size = 0.5)
-# #hist(test)
-# ordered_test <- test[rev(order(test))]
-# summed <- vector(mode = "numeric", length = num)
-# for (i in 1:num) {
-#   summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
-# }
-# ind <- which((summed - 0.8) == min(abs((summed - 0.8))))
-# 
-# ind/num
-# 
-# 
-# pnorm(1.96, 0, 1)
-# qnorm(0.975, 0, 1) # qnorm = CFDF
-# 
-# rnbinom(1, mu = 1, size = 4)
-# 
-# hist(rnbinom(10000, mu = 10, size = 2))
+
+
+x <- seq(0, 1, 0.001)
+plot(qnbinom(x, mu = 100, size = 1.93), x)
+
+test <- rnbinom(10000, mu = 100, size = 3.34)
+hist(test)
+ordered_test <- test[rev(order(test))]
+
+a <- ecdf(ordered_test)
+plot(a)
+quantile(a, 0.8)
+
+par(mfrow = c(1, 2))
+num <- 10000
+test <- rnbinom(num, mu = 100, size = 3.34)
+#hist(test)
+ordered_test <- test[rev(order(test))]
+summed <- vector(mode = "numeric", length = num)
+for (i in 1:num) {
+  summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
+}
+plot(summed)
+
+test <- rnbinom(num, mu = 100, size = 0.5)
+#hist(test)
+ordered_test <- test[rev(order(test))]
+summed <- vector(mode = "numeric", length = num)
+for (i in 1:num) {
+  summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
+}
+ind <- which((summed - 0.8) == min(abs((summed - 0.8))))
+
+ind/num
+
+
+pnorm(1.96, 0, 1)
+qnorm(0.975, 0, 1) # qnorm = CFDF
+
+rnbinom(1, mu = 1, size = 4)
+
+hist(rnbinom(10000, mu = 10, size = 2))
