@@ -3,8 +3,7 @@ library(data.table); library(devtools); library(ggplot2); library(tidyverse)
 library(lubridate); library(rgdal); library(rgeos); library(raster); library(viridis)
 library(ggpolypath); library(maptools); library(tidyverse); library(plyr); library(e1071)
 library(odin); library(ggpubr); library(viridis); library(Hmisc); library(cowplot)
-library(ipred); library(ICDMM); #devtools::install_github("https://github.com/jhellewell14/ICDMM", dependencies = TRUE)
-library(scales); library(patchwork); library(here); library(zoo)
+library(ipred); library(scales); library(patchwork); library(here); library(zoo)
 
 # Loading functions and mosquito bionomics data
 options(scipen = 999)
