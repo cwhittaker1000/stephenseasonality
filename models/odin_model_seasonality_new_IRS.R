@@ -441,6 +441,7 @@ irs_decay_succ1 <- user()
 irs_decay_succ2 <- user()
 irs_decay_mort1 <- user()
 irs_decay_mort2 <- user()
+irs_k0 <- 0.699 # per Sherrard-Smith et al NatComms
 
 # Calculates decay for ITN/IRS
 ITN_decay = if(t < ITN_IRS_on) 0 else exp(-((t-ITN_IRS_on)%%ITN_interval) * itn_loss)
@@ -453,7 +454,7 @@ s_ITN <- if(t < ITN_IRS_on) 1 else 1 - d_ITN - r_ITN
 
 time_since_IRS <- t - ITN_IRS_on
 det_hut_irs <- 1 / (1 + exp(-(irs_decay_det1 + irs_decay_det2*time_since_IRS)));
-succ_hut_irs <- 1 / (1 + exp(-(irs_decay_succ1 + irs_decay_succ2*time_since_IRS)));
+succ_hut_irs <- irs_k0 / (1 + exp(-(irs_decay_succ1 + irs_decay_succ2*time_since_IRS)));
 mort_hut_irs <- 1 / (1 + exp(-(irs_decay_mort1 + irs_decay_mort2*time_since_IRS)));
 rep_hut_irs <- 1 -  succ_hut_irs -  mort_hut_irs;
 
@@ -461,7 +462,6 @@ kp_irs <- (1 - det_hut_irs)*succ_hut_irs;
 jp_irs <- (1 - det_hut_irs)*rep_hut_irs + det_hut_irs;
 lp_irs <- (1 - det_hut_irs)*mort_hut_irs;
 
-irs_k0 <- 0.699
 r_IRS <- if(t < ITN_IRS_on) 0 else (1 - kp_irs/irs_k0)*(jp_irs/(lp_irs + jp_irs));
 d_IRS <- if(t < ITN_IRS_on) 0 else (1 - kp_irs/irs_k0)*(lp_irs/(lp_irs + jp_irs))
 s_IRS <- if(t < ITN_IRS_on) 1 else 1 - d_IRS - r_IRS
