@@ -82,6 +82,9 @@ set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE
 mod_run <- set_up_model$run(t = 1:length(density_vec))
 out <- set_up_model$transform_variables(mod_run)
 model_ran <- as.data.frame(out)
+inc <- data.frame(t = model_ran$t, incidence = model_ran$Incidence)
+rm(model_ran)
+gc()
 
 # Running Model With Ellie's Adapted IRS Formulation - Actellic
 set_up_model2 <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
@@ -115,6 +118,9 @@ set_up_model2 <- set_up_model2$generator(user = set_up_model2$state, use_dde = T
 mod_run2 <- set_up_model2$run(t = 1:length(density_vec))
 out2 <- set_up_model2$transform_variables(mod_run2)
 model_ran2 <- as.data.frame(out2)
+inc2 <- data.frame(t = model_ran2$t, incidence = model_ran2$Incidence)
+rm(model_ran2)
+gc()
 
 # Running Model With Ellie's Adapted IRS Formulation - Bendiocarb
 set_up_model3 <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
@@ -148,6 +154,9 @@ set_up_model3 <- set_up_model3$generator(user = set_up_model3$state, use_dde = T
 mod_run3 <- set_up_model3$run(t = 1:length(density_vec))
 out3 <- set_up_model3$transform_variables(mod_run3)
 model_ran3 <- as.data.frame(out3)
+inc3 <- data.frame(t = model_ran3$t, incidence = model_ran3$Incidence)
+rm(model_ran3)
+gc()
 
 # Running Model With Ellie's Adapted IRS Formulation - Sumishield
 set_up_model4 <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
@@ -181,6 +190,9 @@ set_up_model4 <- set_up_model4$generator(user = set_up_model4$state, use_dde = T
 mod_run4 <- set_up_model4$run(t = 1:length(density_vec))
 out4 <- set_up_model4$transform_variables(mod_run4)
 model_ran4 <- as.data.frame(out4)
+inc4 <- data.frame(t = model_ran4$t, incidence = model_ran4$Incidence)
+rm(model_ran4)
+gc()
 
 # Running Model WITHOUT Ellie's Adapted IRS Formulation - Default Parameters
 set_up_model5 <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality.R", # model file
@@ -208,26 +220,29 @@ set_up_model5 <- set_up_model5$generator(user = set_up_model5$state, use_dde = T
 mod_run5 <- set_up_model5$run(t = 1:length(density_vec))
 out5 <- set_up_model5$transform_variables(mod_run5)
 model_ran5 <- as.data.frame(out5)
+inc5 <- data.frame(t = model_ran5$t, incidence = model_ran5$Incidence)
+rm(model_ran5)
+gc()
 
 par(mfrow = c(1, 2))
-plot(model_ran$Incidence[((years - 2) * 365):length(model_ran$Incidence)], type = "l", ylab = "Incidence",
-     ylim = c(0, max(model_ran$Incidence[((years - 2) * 365):length(model_ran$Incidence)])))
-lines(model_ran2$Incidence[((years - 2) * 365):length(model_ran$Incidence)], type = "l", col = "red")
-lines(model_ran3$Incidence[((years - 2) * 365):length(model_ran$Incidence)], type = "l", col = "blue")
-lines(model_ran4$Incidence[((years - 2) * 365):length(model_ran$Incidence)], type = "l", col = "purple")
-lines(model_ran5$Incidence[((years - 2) * 365):length(model_ran$Incidence)], type = "l", col = "green")
+plot(inc$incidence[((years - 2) * 365):length(inc$incidence)], type = "l", ylab = "Incidence",
+     ylim = c(0, max(inc$incidence[((years - 2) * 365):length(inc$incidence)])))
+lines(inc2$incidence[((years - 2) * 365):length(inc2$incidence)], type = "l", col = "red")
+lines(inc3$incidence[((years - 2) * 365):length(inc3$incidence)], type = "l", col = "blue")
+lines(inc4$incidence[((years - 2) * 365):length(inc4$incidence)], type = "l", col = "purple")
+lines(inc5$incidence[((years - 2) * 365):length(inc5$incidence)], type = "l", col = "green")
 legend(450, 0.0003, legend=c("Baseline", "Actellic", 
                              "Bendiocarb", "Sumishield", "Old Model"),
        col=c("black", "red", "blue", "purple", "green"), lty=1, cex=1)
 
 #par(mfrow = c(1, 1))
-plot(model_ran$Incidence[((years - 2) * 365):((years - 1.5) * 365)], type = "l", ylab = "Incidence",
-     ylim = c(0, max(model_ran$Incidence[((years - 2) * 365):length(model_ran$Incidence)])))
-lines(model_ran2$Incidence[((years - 2) * 365):((years - 1.5) * 365)], type = "l", col = "red")
-lines(model_ran3$Incidence[((years - 2) * 365):((years - 1.5) * 365)], type = "l", col = "blue")
-lines(model_ran4$Incidence[((years - 2) * 365):((years - 1.5) * 365)], type = "l", col = "purple")
-lines(model_ran5$Incidence[((years - 2) * 365):((years - 1.5) * 365)], type = "l", col = "green")
-legend(100, 0.0003, legend=c("Baseline", "Actellic", 
+plot(inc$incidence[((years - 2) * 365):((years - 1.75) * 365)], type = "l", ylab = "Incidence",
+     ylim = c(0, max(inc$incidence[((years - 2) * 365):length(inc$incidence)])))
+lines(inc2$incidence[((years - 2) * 365):((years - 1.75) * 365)], type = "l", col = "red")
+lines(inc3$incidence[((years - 2) * 365):((years - 1.75) * 365)], type = "l", col = "blue")
+lines(inc4$incidence[((years - 2) * 365):((years - 1.75) * 365)], type = "l", col = "purple")
+lines(inc5$incidence[((years - 2) * 365):((years - 1.75) * 365)], type = "l", col = "green")
+legend(50, 0.0003, legend=c("Baseline", "Actellic", 
                              "Bendiocarb", "Sumishield", "Old Model"),
        col=c("black", "red", "blue", "purple", "green"), lty=1, cex=1)
 
