@@ -174,57 +174,57 @@ unregister_dopar <- function() {
 }
 unregister_dopar()
 
-tic()
-multi_outputs <- lapply(1:length(timings[1:8]), function(x){
-    
-  # Generate Model Formulation  
-  set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
-                                          
-                                          #Model parameters to work out transmission
-                                          init_EIR = 1.5, # initial EIR from which the endemic equilibria solution is created
-                                          
-                                          # Mosquito Bionomics
-                                          Q0 = stephensi_data$Q0, 
-                                          chi = stephensi_data$chi, 
-                                          bites_Bed = stephensi_data$bites_Bed,
-                                          bites_Indoors = stephensi_data$bites_Indoors, 
-                                          
-                                          # Seasonal Variation In Density
-                                          custom_seasonality = steph_seasonality_list[[1]], # NA for perennial
-                                          time_length = length(density_vec),
-                                          density_vec = density_vec,
-                                          
-                                          # Vector Control Interventions
-                                          ITN_IRS_on = ((years - 2) * 365) + timings[x],
-                                          num_int = 4,
-                                          irs_decay_det1 = actellic$irs_decay_det1,
-                                          irs_decay_det2 = actellic$irs_decay_det2, 
-                                          irs_decay_succ1 = actellic$irs_decay_succ1,
-                                          irs_decay_succ2 = actellic$irs_decay_succ2, 
-                                          irs_decay_mort1 = actellic$irs_decay_mort1, 
-                                          irs_decay_mort2 = actellic$irs_decay_mort2, 
-                                          irs_cov = 0.8,
-                                          IRS_interval = 10000,
-                                          ITN_interval = 10000,
-                                          itn_cov = 0)
-  
-  # Running Model
-  set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
-  mod_run <- set_up_model$run(t = 1:length(density_vec))
-  out <- set_up_model$transform_variables(mod_run)
-  model_ran <- as.data.frame(out)
-  
-  # Storing Relevant Outputs
-  output <- data.frame(id = x, timing = timings[x], t = model_ran$t, incidence = model_ran$Incidence, prevalence = model_ran$prev)
-  
-  # Removing and Garbage Collecting To Avoid Memory Issues
-  rm(out)
-  rm(mod_run)
-  rm(model_ran)
-  gc()
-  print(x)
-  
-  # Returning the Output 
-  return(output) 
-})
-toc()
+# tic()
+# multi_outputs <- lapply(1:length(timings[1:8]), function(x){
+#     
+#   # Generate Model Formulation  
+#   set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
+#                                           
+#                                           #Model parameters to work out transmission
+#                                           init_EIR = 1.5, # initial EIR from which the endemic equilibria solution is created
+#                                           
+#                                           # Mosquito Bionomics
+#                                           Q0 = stephensi_data$Q0, 
+#                                           chi = stephensi_data$chi, 
+#                                           bites_Bed = stephensi_data$bites_Bed,
+#                                           bites_Indoors = stephensi_data$bites_Indoors, 
+#                                           
+#                                           # Seasonal Variation In Density
+#                                           custom_seasonality = steph_seasonality_list[[1]], # NA for perennial
+#                                           time_length = length(density_vec),
+#                                           density_vec = density_vec,
+#                                           
+#                                           # Vector Control Interventions
+#                                           ITN_IRS_on = ((years - 2) * 365) + timings[x],
+#                                           num_int = 4,
+#                                           irs_decay_det1 = actellic$irs_decay_det1,
+#                                           irs_decay_det2 = actellic$irs_decay_det2, 
+#                                           irs_decay_succ1 = actellic$irs_decay_succ1,
+#                                           irs_decay_succ2 = actellic$irs_decay_succ2, 
+#                                           irs_decay_mort1 = actellic$irs_decay_mort1, 
+#                                           irs_decay_mort2 = actellic$irs_decay_mort2, 
+#                                           irs_cov = 0.8,
+#                                           IRS_interval = 10000,
+#                                           ITN_interval = 10000,
+#                                           itn_cov = 0)
+#   
+#   # Running Model
+#   set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
+#   mod_run <- set_up_model$run(t = 1:length(density_vec))
+#   out <- set_up_model$transform_variables(mod_run)
+#   model_ran <- as.data.frame(out)
+#   
+#   # Storing Relevant Outputs
+#   output <- data.frame(id = x, timing = timings[x], t = model_ran$t, incidence = model_ran$Incidence, prevalence = model_ran$prev)
+#   
+#   # Removing and Garbage Collecting To Avoid Memory Issues
+#   rm(out)
+#   rm(mod_run)
+#   rm(model_ran)
+#   gc()
+#   print(x)
+#   
+#   # Returning the Output 
+#   return(output) 
+# })
+# toc()
