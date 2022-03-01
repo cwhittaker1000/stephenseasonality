@@ -50,7 +50,7 @@ sumishield <- read.csv(here("data", "IRS_parameters", "Sumishield_uncertainty.cs
 # Generating the vector of how mosquito density changes over time 
 density_start <- 20
 density_end <- 20
-years <- 50
+years <- 20
 density_vec <- rep(density_end, 365 * years)
 # values <- sigmoid(seq(-10, 10, length.out = 365 * 4)) # How long you want introduction to last - here, 10 years
 # density_vec <- c(rep(density_start, 365 * 1), 
@@ -224,7 +224,17 @@ inc5 <- data.frame(t = model_ran5$t, incidence = model_ran5$Incidence)
 rm(model_ran5)
 gc()
 
-par(mfrow = c(1, 2))
+par(mfrow = c(1, 3))
+plot(inc$incidence, type = "l", ylab = "Incidence",
+     ylim = c(0, max(inc$incidence[((years - 2) * 365):length(inc$incidence)])))
+lines(inc2$incidence, type = "l", col = "red")
+lines(inc3$incidence, type = "l", col = "blue")
+lines(inc4$incidence, type = "l", col = "purple")
+lines(inc5$incidence, type = "l", col = "green")
+legend(450, 0.0003, legend=c("Baseline", "Actellic", 
+                             "Bendiocarb", "Sumishield", "Old Model"),
+       col=c("black", "red", "blue", "purple", "green"), lty=1, cex=1)
+
 plot(inc$incidence[((years - 2) * 365):length(inc$incidence)], type = "l", ylab = "Incidence",
      ylim = c(0, max(inc$incidence[((years - 2) * 365):length(inc$incidence)])))
 lines(inc2$incidence[((years - 2) * 365):length(inc2$incidence)], type = "l", col = "red")
@@ -235,7 +245,6 @@ legend(450, 0.0003, legend=c("Baseline", "Actellic",
                              "Bendiocarb", "Sumishield", "Old Model"),
        col=c("black", "red", "blue", "purple", "green"), lty=1, cex=1)
 
-#par(mfrow = c(1, 1))
 plot(inc$incidence[((years - 2) * 365):((years - 1.75) * 365)], type = "l", ylab = "Incidence",
      ylim = c(0, max(inc$incidence[((years - 2) * 365):length(inc$incidence)])))
 lines(inc2$incidence[((years - 2) * 365):((years - 1.75) * 365)], type = "l", col = "red")
