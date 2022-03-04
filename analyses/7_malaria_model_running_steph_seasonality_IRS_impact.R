@@ -39,7 +39,6 @@ sumishield <- read.csv(here("data", "IRS_parameters", "Sumishield_uncertainty.cs
   dplyr::summarise(median = median(value)) %>%
   pivot_wider(names_from = "parameter", values_from = "median")
 
-
 # Extracting Mean Realisation for Each Time-Series
 set.seed(10)
 urban_rural <- overall$city
@@ -86,10 +85,76 @@ density <- 20
 years <- 20
 density_vec <- rep(density, 365 * years)
 
+# Generating Counterfactuals - I.e. No IRS
+all_cores <- parallel::detectCores(logical = FALSE)
+cl <- parallel::makeCluster(all_cores)
+doParallel::registerDoParallel(cl)
+parallel::clusterEvalQ(cl, {
+  library(tidymodels); library(odin);
+  source(here::here("functions", "time_series_characterisation_functions.R"))
+  invisible(sapply(list.files("functions/malaria_model_running/", full.names = TRUE, recursive = TRUE), function(x) source(x)))
+  bionomics_data <- read.csv("data/bionomic_species_all_LHC_100.csv", stringsAsFactors = FALSE)
+  stephensi_data <- round(as.data.frame(rbind(colMeans(subset(bionomics_data, species == "stephensi")[, c("Q0", "chi", "bites_Bed", "bites_Indoors")]))), 2)
+  steph_seasonality_list <- readRDS(here::here("data/steph_seasonality_list.rds"))
+  density <- 20
+  years <- 20
+  density_vec <- rep(density, 365 * years)
+  timings <- seq(0, 365, 15)
+})
+
+multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list), function(x){
+  
+  # Generate Model Formulation  
+  set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
+                                            
+                                          #Model parameters to work out transmission
+                                          init_EIR = 1.5, # initial EIR from which the endemic equilibria solution is created
+                                          
+                                          # Mosquito Bionomics
+                                          Q0 = stephensi_data$Q0, 
+                                          chi = stephensi_data$chi, 
+                                          bites_Bed = stephensi_data$bites_Bed,
+                                          bites_Indoors = stephensi_data$bites_Indoors, 
+                                          
+                                          # Seasonal Variation In Density
+                                          custom_seasonality = steph_seasonality_list[[x]], # NA for perennial
+                                          time_length = length(density_vec),
+                                          density_vec = density_vec,
+                                          
+                                          # Vector Control Interventions (Not On, Just Dummy Values)
+                                          irs_decay_det1 = 1,
+                                          irs_decay_det2 = 1, 
+                                          irs_decay_succ1 = 1,
+                                          irs_decay_succ2 = 1, 
+                                          irs_decay_mort1 = 1, 
+                                          irs_decay_mort2 = 1)
+    
+  # Running Model
+  set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
+  mod_run <- set_up_model$run(t = 1:length(density_vec))
+  out <- set_up_model$transform_variables(mod_run)
+  model_ran <- as.data.frame(out)
+  
+  # Storing Relevant Outputs
+  output <- data.frame(seasonal_profile = x, t = model_ran$t, incidence = model_ran$Incidence, prevalence = model_ran$prev)
+  
+  # Removing and Garbage Collecting To Avoid Memory Issues
+  rm(out)
+  rm(mod_run)
+  rm(model_ran)
+  gc()
+  
+  # Returning the Output 
+  return(output) 
+})
+
+saveRDS(multi_outputs, file = "outputs/malaria_model_IRS_running_counterfactuals.rds")
+parallel::stopCluster(cl)
+
 # Intervention Timings
 timings <- seq(0, 365, 15)
 
-# Running All Seasonal Profiles and All Intervention Timings
+# Running All Seasonal Profiles and All Intervention Timings - ACTELLIC
 all_cores <- parallel::detectCores(logical = FALSE)
 cl <- parallel::makeCluster(all_cores)
 doParallel::registerDoParallel(cl)
@@ -112,15 +177,12 @@ parallel::clusterEvalQ(cl, {
   timings <- seq(0, 365, 15)
 })
 
-tic()
 multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list), function(x){
-#multi_outputs <- parallel::parLapply(cl = cl , 1:3, function(x){
-  
+
   output <- data.frame(id = -1, timing = -1, t = -1, incidence = -1, prevalence = -1)
   
   for (i in 1:length(timings)) {
-  #for (i in 1:5) {
-      
+
     # Generate Model Formulation  
     set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
                                             
@@ -170,16 +232,13 @@ multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list),
     
   }
  
-  print(x)
-  
   # Returning the Output 
   return(output) 
 })
-toc()
 saveRDS(multi_outputs, file = "outputs/malaria_model_IRS_running_actelic.rds")
 parallel::stopCluster(cl)
 
-# Running All Seasonal Profiles and All Intervention Timings
+# Running All Seasonal Profiles and All Intervention Timings - BENDIOCARB
 all_cores <- parallel::detectCores(logical = FALSE)
 cl <- parallel::makeCluster(all_cores)
 doParallel::registerDoParallel(cl)
@@ -202,15 +261,12 @@ parallel::clusterEvalQ(cl, {
   timings <- seq(0, 365, 15)
 })
 
-tic()
 multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list), function(x){
-  #multi_outputs <- parallel::parLapply(cl = cl , 1:3, function(x){
-  
+
   output <- data.frame(id = -1, timing = -1, t = -1, incidence = -1, prevalence = -1)
   
   for (i in 1:length(timings)) {
-    #for (i in 1:5) {
-    
+
     # Generate Model Formulation  
     set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
                                             
@@ -260,22 +316,13 @@ multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list),
     
   }
   
-  print(x)
-  
   # Returning the Output 
   return(output) 
 })
-toc()
 saveRDS(multi_outputs, file = "outputs/malaria_model_IRS_running_bendiocarb.rds")
 parallel::stopCluster(cl)
 
-unregister_dopar <- function() {
-  env <- foreach:::.foreachGlobals
-  rm(list=ls(name=env), pos=env)
-}
-unregister_dopar()
-
-# Running All Seasonal Profiles and All Intervention Timings
+# Running All Seasonal Profiles and All Intervention Timings - SUMISHIELD
 all_cores <- parallel::detectCores(logical = FALSE)
 cl <- parallel::makeCluster(all_cores)
 doParallel::registerDoParallel(cl)
@@ -300,15 +347,12 @@ parallel::clusterEvalQ(cl, {
   timings <- seq(0, 365, 15)
 })
 
-tic()
 multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list), function(x){
-  #multi_outputs <- parallel::parLapply(cl = cl , 1:3, function(x){
-  
+
   output <- data.frame(id = -1, timing = -1, t = -1, incidence = -1, prevalence = -1)
   
   for (i in 1:length(timings)) {
-    #for (i in 1:5) {
-    
+
     # Generate Model Formulation  
     set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
                                             
@@ -358,20 +402,10 @@ multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list),
     
   }
   
-  print(x)
-  
   # Returning the Output 
   return(output) 
 })
-toc()
 saveRDS(multi_outputs, file = "outputs/malaria_model_IRS_running_sumishield.rds")
-parallel::stopCluster(cl)
-
-unregister_dopar <- function() {
-  env <- foreach:::.foreachGlobals
-  rm(list=ls(name=env), pos=env)
-}
-unregister_dopar()
 
 # list_of_lists <- vector(mode = "list", length = 2)
 # tic()
