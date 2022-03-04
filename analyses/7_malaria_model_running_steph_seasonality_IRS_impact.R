@@ -114,11 +114,13 @@ parallel::clusterEvalQ(cl, {
 
 tic()
 multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list), function(x){
-
+#multi_outputs <- parallel::parLapply(cl = cl , 1:3, function(x){
+  
   output <- data.frame(id = -1, timing = -1, t = -1, incidence = -1, prevalence = -1)
   
   for (i in 1:length(timings)) {
-    
+  #for (i in 1:5) {
+      
     # Generate Model Formulation  
     set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
                                             
@@ -157,7 +159,7 @@ multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list),
     model_ran <- as.data.frame(out)
     
     # Storing Relevant Outputs
-    temp_output <- data.frame(id = x, timing = timings[i], t = model_ran$t, incidence = model_ran$Incidence, prevalence = model_ran$prev)
+    temp_output <- data.frame(id = i, timing = timings[i], t = model_ran$t, incidence = model_ran$Incidence, prevalence = model_ran$prev)
     output <- rbind(output, temp_output)
     
     # Removing and Garbage Collecting To Avoid Memory Issues
@@ -174,8 +176,197 @@ multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list),
   return(output) 
 })
 toc()
-
+saveRDS(multi_outputs, file = "outputs/malaria_model_IRS_running_actelic.rds")
 parallel::stopCluster(cl)
+
+# Running All Seasonal Profiles and All Intervention Timings
+all_cores <- parallel::detectCores(logical = FALSE)
+cl <- parallel::makeCluster(all_cores)
+doParallel::registerDoParallel(cl)
+parallel::clusterEvalQ(cl, {
+  library(tidymodels); library(odin);
+  source(here::here("functions", "time_series_characterisation_functions.R"))
+  invisible(sapply(list.files("functions/malaria_model_running/", full.names = TRUE, recursive = TRUE), function(x) source(x)))
+  bionomics_data <- read.csv("data/bionomic_species_all_LHC_100.csv", stringsAsFactors = FALSE)
+  stephensi_data <- round(as.data.frame(rbind(colMeans(subset(bionomics_data, species == "stephensi")[, c("Q0", "chi", "bites_Bed", "bites_Indoors")]))), 2)
+  bendiocarb <- read.csv(here::here("data", "IRS_parameters", "Bendiocarb_uncertainty.csv")) %>%
+    pivot_longer(cols = irs_decay_mort1:irs_decay_det2, values_to = "value", names_to = "parameter") %>%
+    mutate(parameter = factor(parameter)) %>%
+    dplyr::group_by(parameter) %>%
+    dplyr::summarise(median = median(value)) %>%
+    pivot_wider(names_from = "parameter", values_from = "median")
+  steph_seasonality_list <- readRDS(here::here("data/steph_seasonality_list.rds"))
+  density <- 20
+  years <- 20
+  density_vec <- rep(density, 365 * years)
+  timings <- seq(0, 365, 15)
+})
+
+tic()
+multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list), function(x){
+  #multi_outputs <- parallel::parLapply(cl = cl , 1:3, function(x){
+  
+  output <- data.frame(id = -1, timing = -1, t = -1, incidence = -1, prevalence = -1)
+  
+  for (i in 1:length(timings)) {
+    #for (i in 1:5) {
+    
+    # Generate Model Formulation  
+    set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
+                                            
+                                            #Model parameters to work out transmission
+                                            init_EIR = 1.5, # initial EIR from which the endemic equilibria solution is created
+                                            
+                                            # Mosquito Bionomics
+                                            Q0 = stephensi_data$Q0, 
+                                            chi = stephensi_data$chi, 
+                                            bites_Bed = stephensi_data$bites_Bed,
+                                            bites_Indoors = stephensi_data$bites_Indoors, 
+                                            
+                                            # Seasonal Variation In Density
+                                            custom_seasonality = steph_seasonality_list[[x]], # NA for perennial
+                                            time_length = length(density_vec),
+                                            density_vec = density_vec,
+                                            
+                                            # Vector Control Interventions
+                                            ITN_IRS_on = ((years - 2) * 365) + timings[i],
+                                            num_int = 4,
+                                            irs_decay_det1 = bendiocarb$irs_decay_det1,
+                                            irs_decay_det2 = bendiocarb$irs_decay_det2, 
+                                            irs_decay_succ1 = bendiocarb$irs_decay_succ1,
+                                            irs_decay_succ2 = bendiocarb$irs_decay_succ2, 
+                                            irs_decay_mort1 = bendiocarb$irs_decay_mort1, 
+                                            irs_decay_mort2 = bendiocarb$irs_decay_mort2, 
+                                            irs_cov = 0.8,
+                                            IRS_interval = 10000,
+                                            ITN_interval = 10000,
+                                            itn_cov = 0)
+    
+    # Running Model
+    set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
+    mod_run <- set_up_model$run(t = 1:length(density_vec))
+    out <- set_up_model$transform_variables(mod_run)
+    model_ran <- as.data.frame(out)
+    
+    # Storing Relevant Outputs
+    temp_output <- data.frame(id = i, timing = timings[i], t = model_ran$t, incidence = model_ran$Incidence, prevalence = model_ran$prev)
+    output <- rbind(output, temp_output)
+    
+    # Removing and Garbage Collecting To Avoid Memory Issues
+    rm(out)
+    rm(mod_run)
+    rm(model_ran)
+    gc()
+    
+  }
+  
+  print(x)
+  
+  # Returning the Output 
+  return(output) 
+})
+toc()
+saveRDS(multi_outputs, file = "outputs/malaria_model_IRS_running_bendiocarb.rds")
+parallel::stopCluster(cl)
+
+unregister_dopar <- function() {
+  env <- foreach:::.foreachGlobals
+  rm(list=ls(name=env), pos=env)
+}
+unregister_dopar()
+
+# Running All Seasonal Profiles and All Intervention Timings
+all_cores <- parallel::detectCores(logical = FALSE)
+cl <- parallel::makeCluster(all_cores)
+doParallel::registerDoParallel(cl)
+parallel::clusterEvalQ(cl, {
+  library(tidymodels); library(odin);
+  source(here::here("functions", "time_series_characterisation_functions.R"))
+  invisible(sapply(list.files("functions/malaria_model_running/", full.names = TRUE, recursive = TRUE), function(x) source(x)))
+  bionomics_data <- read.csv("data/bionomic_species_all_LHC_100.csv", stringsAsFactors = FALSE)
+  stephensi_data <- round(as.data.frame(rbind(colMeans(subset(bionomics_data, species == "stephensi")[, c("Q0", "chi", "bites_Bed", "bites_Indoors")]))), 2)
+  sumishield <- read.csv(here::here("data", "IRS_parameters", "Sumishield_uncertainty.csv")) %>%
+    dplyr::rename(irs_decay_mort1 = Mort1, irs_decay_mort2 = Mort2, irs_decay_succ1 = Succ1, 
+                  irs_decay_succ2 = Succ2, irs_decay_det1 = Det1, irs_decay_det2 = Det2) %>%
+    pivot_longer(cols = irs_decay_mort1:irs_decay_det2, values_to = "value", names_to = "parameter") %>%
+    mutate(parameter = factor(parameter)) %>%
+    dplyr::group_by(parameter) %>%
+    dplyr::summarise(median = median(value)) %>%
+    pivot_wider(names_from = "parameter", values_from = "median")
+  steph_seasonality_list <- readRDS(here::here("data/steph_seasonality_list.rds"))
+  density <- 20
+  years <- 20
+  density_vec <- rep(density, 365 * years)
+  timings <- seq(0, 365, 15)
+})
+
+tic()
+multi_outputs <- parallel::parLapply(cl = cl , 1:length(steph_seasonality_list), function(x){
+  #multi_outputs <- parallel::parLapply(cl = cl , 1:3, function(x){
+  
+  output <- data.frame(id = -1, timing = -1, t = -1, incidence = -1, prevalence = -1)
+  
+  for (i in 1:length(timings)) {
+    #for (i in 1:5) {
+    
+    # Generate Model Formulation  
+    set_up_model <- create_r_model_epidemic(odin_model_path = "models/odin_model_seasonality_new_IRS.R", # model file
+                                            
+                                            #Model parameters to work out transmission
+                                            init_EIR = 1.5, # initial EIR from which the endemic equilibria solution is created
+                                            
+                                            # Mosquito Bionomics
+                                            Q0 = stephensi_data$Q0, 
+                                            chi = stephensi_data$chi, 
+                                            bites_Bed = stephensi_data$bites_Bed,
+                                            bites_Indoors = stephensi_data$bites_Indoors, 
+                                            
+                                            # Seasonal Variation In Density
+                                            custom_seasonality = steph_seasonality_list[[x]], # NA for perennial
+                                            time_length = length(density_vec),
+                                            density_vec = density_vec,
+                                            
+                                            # Vector Control Interventions
+                                            ITN_IRS_on = ((years - 2) * 365) + timings[i],
+                                            num_int = 4,
+                                            irs_decay_det1 = sumishield$irs_decay_det1,
+                                            irs_decay_det2 = sumishield$irs_decay_det2, 
+                                            irs_decay_succ1 = sumishield$irs_decay_succ1,
+                                            irs_decay_succ2 = sumishield$irs_decay_succ2, 
+                                            irs_decay_mort1 = sumishield$irs_decay_mort1, 
+                                            irs_decay_mort2 = sumishield$irs_decay_mort2, 
+                                            irs_cov = 0.8,
+                                            IRS_interval = 10000,
+                                            ITN_interval = 10000,
+                                            itn_cov = 0)
+    
+    # Running Model
+    set_up_model <- set_up_model$generator(user = set_up_model$state, use_dde = TRUE)
+    mod_run <- set_up_model$run(t = 1:length(density_vec))
+    out <- set_up_model$transform_variables(mod_run)
+    model_ran <- as.data.frame(out)
+    
+    # Storing Relevant Outputs
+    temp_output <- data.frame(id = i, timing = timings[i], t = model_ran$t, incidence = model_ran$Incidence, prevalence = model_ran$prev)
+    output <- rbind(output, temp_output)
+    
+    # Removing and Garbage Collecting To Avoid Memory Issues
+    rm(out)
+    rm(mod_run)
+    rm(model_ran)
+    gc()
+    
+  }
+  
+  print(x)
+  
+  # Returning the Output 
+  return(output) 
+})
+toc()
+saveRDS(multi_outputs, file = "outputs/malaria_model_IRS_running_sumishield.rds")
+parallel::stopCluster(cl)
+
 unregister_dopar <- function() {
   env <- foreach:::.foreachGlobals
   rm(list=ls(name=env), pos=env)
