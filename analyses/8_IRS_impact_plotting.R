@@ -73,7 +73,8 @@ irs_killing_plot <- ggplot(irs_killing, aes(x = time_since_IRS, y = mortality_ef
   labs(x = "Time Since IRS Spraying (Days)", y = "Probability of Mosquitoes Dying") +
   theme_bw() +
   theme(legend.justification = c(1, 0), #
-        legend.position = c(1, 0.75)) +
+        legend.position = "none") +
+        #legend.position = c(1, 0.75)) +
   guides(col = guide_legend(ncol = 1, title = "Insecticide"))
   
 # Extracting Mean Realisation for Each Time-Series
@@ -247,24 +248,83 @@ max_red_ben <- reduction %>%
   ungroup() %>%
   filter(inc_red == max_inc_red) %>%
   filter(insecticide == "ben")
+max_red_sumi <- reduction %>%
+  group_by(insecticide, seasonal_profile) %>%
+  mutate(max_inc_red = max(inc_red),
+         max_inc_prop_red = max(inc_prop_red)) %>%
+  ungroup() %>%
+  filter(inc_red == max_inc_red) %>%
+  filter(insecticide == "clothi")
 
-for (i in c(14, 30)) {
-  
-  timing_index <- unique(act_mod2$timing)[max_red_act$timing[i]]
-  temp_act <- act_mod2[act_mod2$seasonal_profile == max_red_act$seasonal_profile[i] &
-                         act_mod2$timing == timing_index, ]
-  temp_ben <- ben_mod2[act_mod2$seasonal_profile == max_red_ben$seasonal_profile[i] &
-                         act_mod2$timing == timing_index, ]
-  
-  plot(temp_act$counterfactual_incidence, type = "l",
-       main = paste0("Seasonal Profile ", i, " - Seasonality = ", round(seasonality[i], 2), 
-                     "\n Timing = ", timing_index), ylab = "", xlab = "",
-       ylim = c(0, max(temp_act$counterfactual_incidence)))
-  abline(v = c(0, 365, 730), lty = 2)
-  abline(v = timing_index, lty = 1)
-  
-  lines(temp_act$incidence, col = "red")  
-  lines(temp_ben$incidence, col = "blue")  
-  browser()
-}
+act_timings <- unique(act_mod2$timing)[max_red_act$timing[c(7, 11)]]
+act_disp <- act_mod2 %>%
+  filter(seasonal_profile %in% c(7, 11)) %>%
+  filter(ifelse(seasonal_profile == 7, timing == act_timings[1], timing == act_timings[2])) %>%
+  dplyr::select(seasonal_profile, timing, t, incidence, counterfactual_incidence)
+act_disp$insecticide <- "Pirimiphos Methyl"
 
+ben_timings <- unique(ben_mod2$timing)[max_red_ben$timing[c(7, 11)]]
+ben_disp <- ben_mod2 %>%
+  filter(seasonal_profile %in% c(7, 11)) %>%
+  filter(ifelse(seasonal_profile == 7, timing == ben_timings[1], timing == ben_timings[2])) %>%
+  dplyr::select(seasonal_profile, timing, t, incidence, counterfactual_incidence)
+ben_disp$insecticide <- "Bendiocarb"
+
+sumi_timings <- unique(sumi_mod2$timing)[max_red_sumi$timing[c(7, 11)]]
+sumi_disp <- sumi_mod2 %>%
+  filter(seasonal_profile %in% c(7, 11)) %>%
+  filter(ifelse(seasonal_profile == 7, timing == sumi_timings[1], timing == sumi_timings[2])) %>%
+  dplyr::select(seasonal_profile, timing, t, incidence, counterfactual_incidence)
+sumi_disp$insecticide <- "Clothiandin"
+
+overall_eg_plot <- rbind(act_disp, ben_disp, sumi_disp)
+hline_dat <- data.frame(seasonal_profile = c(7, 11), timing = c(act_timings, ben_timings, sumi_timings),
+                        insecticide = c(rep("Pirimiphos Methyl", 2), rep("Bendiocarb", 2), rep("Clothiandin", 2)))
+
+inc_eg_plot <- ggplot() +
+  geom_line(data = overall_eg_plot, aes(x = t - 6570, y = 1000*counterfactual_incidence, 
+                                        group = seasonal_profile), col = "black") +
+  geom_vline(data = hline_dat, aes(xintercept = timing, col = insecticide, group = seasonal_profile), linetype = "dashed") +
+  facet_wrap(~seasonal_profile, nrow = 1) +
+  geom_line(data = overall_eg_plot, aes(x = t - 6570, y = 1000*incidence, col = insecticide)) +
+  geom_line(data = overall_eg_plot, aes(x = t - 6570, y = 1000*counterfactual_incidence, 
+                                        group = seasonal_profile), col = "black") +
+  geom_vline(xintercept = c(0, 365, 730), linetype = "dashed") +
+  scale_colour_manual(values = c("#FA9F42", "#0B6E4F", "#B2B2B3"),
+                      labels = c("Bendiocarb", "Clothiandin", "Pirimiphos Methyl")) +
+  labs(x = "Time Since IRS Spraying (Days)", y = "Malaria Incidence Per 1000") +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_blank(),
+        strip.text = element_blank())
+
+x <- cowplot::plot_grid(irs_killing_plot, IRS_max_red_boxplot, 
+                        IRS_max_red_season_scatterplot, nrow = 1,
+                   align = "h", axis = "tb", labels = c("A", "B", "C"),
+                   label_size = 18)
+
+y <- cowplot::plot_grid(x, inc_eg_plot, nrow = 2, rel_heights = c(1.2, 1),
+                   labels = c("", "D"))
+
+ggsave(y, file = "figures/Fig5_Overall.pdf", width = 12, height = 7)
+# for (i in 1:length(steph_seasonality_list)) {
+#   
+#   timing_index_act <- unique(act_mod2$timing)[max_red_act$timing[i]]
+#   temp_act <- act_mod2[act_mod2$seasonal_profile == max_red_act$seasonal_profile[i] &
+#                          act_mod2$timing == timing_index_act, ]
+#   timing_index_ben <- unique(ben_mod2$timing)[max_red_ben$timing[i]]
+#   temp_ben <- ben_mod2[ben_mod2$seasonal_profile == max_red_ben$seasonal_profile[i] &
+#                          act_mod2$timing == timing_index_ben, ]
+#   
+#   plot(temp_act$counterfactual_incidence, type = "l",
+#        main = paste0("Seasonal Profile ", i, " - Seasonality = ", round(seasonality[i], 2), 
+#                      "\n Timing = ", timing_index), ylab = "", xlab = "",
+#        ylim = c(0, max(temp_act$counterfactual_incidence)))
+#   abline(v = c(0, 365, 730), lty = 2)
+#   abline(v = timing_index_act, lty = 1, col = "red")
+#   abline(v = timing_index_ben, lty = 1, col = "blue")
+#   lines(temp_act$incidence, col = "red")  
+#   lines(temp_ben$incidence, col = "blue")  
+#   lines(temp_act$counterfactual_incidence)  
+#   browser()
+# }
