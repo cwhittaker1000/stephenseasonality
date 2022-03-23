@@ -229,7 +229,7 @@ rainfall_storage <- matrix(nrow = dim(overall)[1], ncol = length(months_length))
 for (i in 1:length(overall$id)) {
   index <- overall$id[i]
   temp <- c()
-  rf <- read.csv(paste0("data/location_specific_rainfall/rainfall_ts", index, ".csv"))
+  rf <- read.csv(here(paste0("data/location_specific_rainfall/rainfall_ts", index, ".csv")))
   rf <- rf %>%
     group_by(daymonth_id) %>%
     summarise(rainfall = mean(rainfall))
@@ -332,6 +332,37 @@ clustering_results <- kmeans(PCA_output[, 1:4], num_clust, nstart = 20)
 cluster_membership <- clustering_results$cluster
 cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, cluster = clustering_results$cluster, reordered_mean_realisation)
 saveRDS(cluster_output, file = here("data", "systematic_review_results", "cluster_membership.rds"))
+
+# Comparing Sample Sizes
+one <- cluster_membership == 1
+one_total <- total_raw_catch$total_raw[one]
+two <- cluster_membership == 2
+two_total <- total_raw_catch$total_raw[two]
+median(one_total)
+median(two_total)
+mean(one_total)
+mean(two_total)
+
+df_catch_size <- data.frame(total_raw_catch, cluster = factor(cluster_membership))
+catch_size_hist <- ggplot(df_catch_size, aes(x = log(total_raw))) +
+  geom_histogram(aes(fill = cluster)) +
+  labs(x = "Log Total Catch Size") +
+  scale_fill_manual(values = c("#DF536B", "black")) +
+  theme_bw() +
+  theme(legend.position = "none")
+df_catch_size$cluster <- factor(df_catch_size$cluster)
+df_catch_size$cluster_membership <- ifelse(df_catch_size$cluster == 1, "Cluster 1", "Cluster 2")
+catch_size_comparison <- ggplot(df_catch_size, aes(x = cluster_membership, y = log(total_raw), colour = factor(cluster_membership))) +
+  geom_boxplot(fill = NA) +
+  geom_jitter(aes(x = factor(cluster_membership), y = log(total_raw)), size = 1, width = 0.25) +
+  labs(x = "", y = "Log Total Catch Size") +
+  scale_colour_manual(values = c("#DF536B", "black")) +
+  theme_bw() +
+  theme(legend.position = "none")
+t.test(total_raw ~ cluster_membership, data = df_catch_size)
+mood.test(df_catch_size$total_raw[df_catch_size$cluster == 1], df_catch_size$total_raw[df_catch_size$cluster == 2])
+catch_size_plots <- cowplot::plot_grid(catch_size_comparison, catch_size_hist, nrow = 1, ncol = 2)
+cowplot::ggsave2(file = here("figures", "Supp_Fig_CatchSizeComparison.pdf"), plot = catch_size_plots, width = 11, height = 5, dpi = 500)
 
 # Plotting the First 2 Principle Components
 
