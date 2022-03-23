@@ -140,7 +140,12 @@ metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_proc
 admin2 <- readRDS(here("data", "admin_units", "simplified_admin2.rds"))
 admin1 <- readRDS(here("data", "admin_units", "simplified_admin1.rds"))
 admin0 <- readRDS(here("data", "admin_units", "simplified_admin0.rds"))
-
+cluster <- readRDS(here("data/systematic_review_results/cluster_membership.rds")) %>%
+  dplyr::select(id, cluster)
+metadata <- metadata %>%
+  left_join(cluster, by = "id")
+metadata$cluster <- as.factor(metadata$cluster)
+  
 # Helper function to get ggplot2 default colours
 gg_color_hue <- function(n) {
   hues = seq(15, 375, length = n + 1)
@@ -157,6 +162,8 @@ for (i in 1:nrow(metadata)) {
     admin_geometry <- st_as_sf(admin_2_data)
     centroid <- st_centroid(admin_geometry)
     centroid <- centroid[c("continent", "ISO", "NAME_0", "geometry", "NAME_1", "NAME_2")]
+    centroid$city <- metadata$city[i]
+    centroid$cluster <- metadata$cluster[i]
   } else {
     metadata_admin <- metadata$admin1[i]
     admin_1_data <- admin1[admin1$NAME_1 == metadata_admin, ]
@@ -164,6 +171,8 @@ for (i in 1:nrow(metadata)) {
     centroid <- st_centroid(admin_geometry)
     centroid <- centroid[c("continent", "ISO", "NAME_0", "geometry", "NAME_1")]
     centroid$NAME_2 <- NA
+    centroid$city <- metadata$city[i]
+    centroid$cluster <- metadata$cluster[i]
   }
   
   if (i == 1) {
@@ -225,6 +234,24 @@ a <- ggplot() +
         legend.text = element_text(size = 11),
         legend.title = element_text(size = 13, face = "bold")) +
   guides(fill = guide_legend(title = "Country", override.aes = list(size = 5)))
+
+urban_rural_plot <- ggplot() + 
+  geom_sf(data = red_admin0, 
+          fill = ifelse(red_admin0$stephensi == "Yes", gray(0.98), gray(0.85)),
+          col = ifelse(red_admin0$stephensi == "Yes", "black", gray(0.6))) +
+  geom_sf(data = red_admin0[red_admin0$stephensi == "Yes", ], fill = gray(0.98),
+          col = "black") +
+  geom_sf(data = st_jitter(centroid_metadata, factor = .008), 
+          aes(fill = interaction(city, cluster)), col = "black", size = 2, shape = 21) +
+  # geom_sf(data = st_jitter(centroid_metadata[centroid_metadata$city == "Mixture/Unclear", ], factor = .008), 
+  #         fill = "black", col = "black", size = 2, shape = 21) +
+  coord_sf(ylim = c(0, 45), xlim = c(30, 105), expand = FALSE) +
+  #scale_fill_manual(values = c("#34DFF1", "#289AC1", "#FF8682", "#E2302A")) +
+  scale_fill_discrete(labels = c("Unclear 1 Peak", "Rural 1 Peak", "Urban 1 Peak", "Rural 2 Peaks", "Urban 2 Peaks")) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  guides(fill = guide_legend(title = "Type of Setting and Number of Peaks", nrow = 2))
+ggsave2(file = here("figures", "Supp_Figure_UrbanLocations.pdf"), plot = urban_rural_plot, width = 14, height = 7, dpi = 500)
 
 # Plotting some representative time-series
 for_plot_index <- c(4, 57, 26, 53, 34, 31)

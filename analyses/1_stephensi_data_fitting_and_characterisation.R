@@ -346,12 +346,14 @@ two_mean <- apply(PCA_output[cluster_membership == 2, 1:2], 2, mean)
 two_ellipse <- ellipse::ellipse(x = two_cov, centre = two_mean, level = 0.95)
 
 ## Plotting the PCA Loadings and Ellipses
+# palette is "black"   "#DF536B" "#61D04F" "#2297E6" "#28E2E5" "#CD0BBC" "#F5C710" "gray62"
+colours <- palette()[1:2]
 ellipse_df <- data.frame(cluster = factor(c(rep(1, length(one_ellipse[, 1])), rep(2, length(two_ellipse[, 1])))), rbind(one_ellipse, two_ellipse))
 pca_df <- data.frame(cluster = factor(cluster_membership), PCA_output)
 pca_plot <- ggplot() +
   geom_polygon(data = ellipse_df, aes(x = PC2, y = PC1, fill = cluster), alpha = 0.2) +
   geom_point(data = pca_df, aes(x = PC2, y = PC1, col = cluster), size = 2) +
-  coord_cartesian(xlim = c(-2.25, 5), ylim = c(-2.5, 8)) + 
+  #coord_cartesian(xlim = c(-2.25, 5), ylim = c(-2.5, 8)) + 
   scale_fill_manual(values = colours[1:2]) +
   scale_colour_manual(values = colours[1:2]) +
   labs(x = "Principal Component 2 (15% Total Variation)",
@@ -368,13 +370,13 @@ cluster_df <- cluster_df %>%
 mean_df <- cluster_df %>%
   group_by(timepoint, timepoint2, cluster) %>%
   summarise(mean = mean(density))
-cluster_time_series <- ggplot(cluster_df, aes(x = timepoint2, y = 100 * density)) +
+cluster_time_series <- ggplot(cluster_df, aes(x = timepoint2, y = 100 * density * 25/12)) +
   geom_line(aes(col = cluster, group = id), alpha = 0.2) +
-  coord_cartesian(ylim = c(0, 20)) +
+  coord_cartesian(ylim = c(0, 42)) +
   scale_x_continuous(breaks = seq(1, 23, 2), labels = 1:12) +
   facet_wrap(~cluster, nrow = 2) +
   theme_bw() +
-  geom_line(data = mean_df, aes(x = timepoint2, y = 100 * mean, col = cluster), size = 2) +
+  geom_line(data = mean_df, aes(x = timepoint2, y = 100 * mean * 25/12, col = cluster), size = 2) +
   scale_color_manual(values = colours[2:1]) +
   labs(y = "Normalised Monthly Vector Density", x = "Peak-Standardised Time (Months)") +
   theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
@@ -467,12 +469,12 @@ mean_rainfall_df <- cluster_df %>%
   summarise(mean = mean(rainfall_density))
 
 four_cluster <- ggplot() +
-  geom_line(data = cluster_df, aes(x = timepoint2, y = 100 * vector_density, col = cluster, group = id), alpha = 0.2) +
-  coord_cartesian(ylim = c(0, 20)) +
+  geom_line(data = cluster_df, aes(x = timepoint2, y = 100 * vector_density * 25/12, col = cluster, group = id), alpha = 0.2) +
+  coord_cartesian(ylim = c(0, 20 * 25/12)) +
   scale_x_continuous(breaks = seq(1, 23, 2), labels = 1:12) +
   facet_wrap(~cluster, nrow = 2) +
   theme_bw() +
-  geom_line(data = mean_df, aes(x = timepoint2, y = 100 * mean, col = cluster), size = 2) +
+  geom_line(data = mean_df, aes(x = timepoint2, y = 100 * mean * 25/12, col = cluster), size = 2) +
   scale_color_manual(values = palette()[6:3]) +
   labs(y = "Normalised Monthly Vector Density", x = "Peak-Standardised Time (Months)") +
   theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
