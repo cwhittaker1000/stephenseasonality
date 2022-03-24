@@ -287,8 +287,6 @@ cluster <- readRDS("data/systematic_review_results/cluster_membership.rds") %>%
 overall_pv3_subset <- overall_pv3 %>%
   left_join(cluster, by = "id") %>%
   filter(cluster == 1)
-  #filter(id %in% c(6, 19, 22, 36, 37, 52, 55, 63, 64, 65, 73))
-
 overall_pv4_subset <- overall_pv3_subset %>%
   select(id, timepoint, norm_vector_dens)
 overall_pv4_subset2 <- overall_pv3_subset %>%
@@ -296,14 +294,41 @@ overall_pv4_subset2 <- overall_pv3_subset %>%
 overall_pv5 <- overall_pv4_subset %>%
   left_join(overall_pv4_subset2, by = c("timepoint" = "lagged_timepoint"))
 
-ggplot(data = overall_pv5) +
-  #geom_point(aes(x = airtemp, y = norm_vector_dens)) +
-  geom_smooth(aes(x = airtemp, y = norm_vector_dens))
-ggplot(data = overall_pv5) +
-  #geom_point(aes(x = rainfall, y = norm_vector_dens)) +
-  geom_smooth(aes(x = rainfall, y = norm_vector_dens)) 
+dens_lims_rain_y <- c(0.03, 0.06)
+dens_lims_rain_x <- c(0, 250)
 
+dens_lims_temp_y <- c(0.02, 0.06)
+dens_lims_temp_x <- c(10, 36)
 
+a <- ggplot(data = overall_pv5) +
+  geom_smooth(aes(x = airtemp, y = norm_vector_dens), col = "#DF536B", fill = "dark grey") +
+  labs(x = expression("Air Temperature ("*~degree*C* ')'), y = "Norm. Vector Density") +
+  coord_cartesian(ylim = dens_lims_temp_y, xlim = dens_lims_temp_x)
+b <- ggplot(data = overall_pv5) +
+  geom_smooth(aes(x = rainfall, y = norm_vector_dens), col = "#DF536B", fill = "dark grey")  +
+  labs(x = "Rainfall", y = "Norm. Vector Density") +
+  coord_cartesian(ylim = dens_lims_rain_y, xlim = dens_lims_rain_x)
+
+overall_pv3_subset <- overall_pv3 %>%
+  left_join(cluster, by = "id") %>%
+  filter(cluster == 2)
+overall_pv4_subset <- overall_pv3_subset %>%
+  select(id, timepoint, norm_vector_dens)
+overall_pv4_subset2 <- overall_pv3_subset %>%
+  select(id, lagged_timepoint, airtemp, rainfall)
+overall_pv5 <- overall_pv4_subset %>%
+  left_join(overall_pv4_subset2, by = c("timepoint" = "lagged_timepoint"))
+
+c <- ggplot(data = overall_pv5) +
+  geom_smooth(aes(x = airtemp, y = norm_vector_dens), col = "black", fill = "dark grey") +
+  labs(x = expression("Air Temperature ("*~degree*C* ')'), y = "Norm. Vector Density") +
+  coord_cartesian(ylim = dens_lims_temp_y, xlim = dens_lims_temp_x)
+d <- ggplot(data = overall_pv5) +
+  geom_smooth(aes(x = rainfall, y = norm_vector_dens), col = "black", fill = "dark grey") +
+  labs(x = "Rainfall", y = "Norm. Vector Density") +
+  coord_cartesian(ylim = dens_lims_rain_y, xlim = dens_lims_rain_x)
+
+cowplot::plot_grid(a, b, c, d, nrow = 2)
 
 ##############################################
 ggplot(data = overall_pv3_subset) +
