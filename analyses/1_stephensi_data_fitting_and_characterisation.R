@@ -333,7 +333,8 @@ cluster_membership <- clustering_results$cluster
 cluster_output <- data.frame(id = metadata$id, country = metadata$country, city = metadata$city, cluster = clustering_results$cluster, reordered_mean_realisation)
 saveRDS(cluster_output, file = here("data", "systematic_review_results", "cluster_membership.rds"))
 
-# Comparing Sample Sizes
+# Comparing Sample Sizes ## GO BACK AND CALCULATE MONTHLY CATCHES INSTEAD OF TOTAL AS SOME HAVE
+## 11 MONTHS NOT 12
 one <- cluster_membership == 1
 one_total <- total_raw_catch$total_raw[one]
 two <- cluster_membership == 2
