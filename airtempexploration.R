@@ -206,6 +206,7 @@ all_ts_plot <- ggplot(data = overall_pv) +
   guides(col = "none", fill = guide_legend(nrow = 1, ncol = 6, title = ""))
 
 # Extracting Air Temp and Rainfall Data (also sort out leap year stuff)
+# Air Temp is from: https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_DAILY?hl=en#description
 leap_years <- c(1976, 1980, 1984, 1988, 1992, 1996, 2000, 2004, 2008, 2016,	2020)
 months_length <- c(15, 16, 14, 14, 15, 16, 15, 15, 15, 16, 15, 15, 15, 16, 15, 16, 15, 15, 15, 16, 15, 15, 15, 16)
 rainfall_storage <- matrix(nrow = dim(overall)[1], ncol = length(months_length)) # this is 24 long rather than 25 like ento fits - why is this?? Need to check
