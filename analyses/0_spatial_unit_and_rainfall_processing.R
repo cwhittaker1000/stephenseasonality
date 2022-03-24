@@ -30,7 +30,7 @@ for (i in 1:nrow(admin0)) {
 saveRDS(admin0, here("data", "admin_units", "simplified_admin0.rds"))
 
 # Loading in admin 1 units, simplifying and saving
-admin1 <- readRDS(here("data", "raw_gadm_shapefiles", "level1.rds"))
+admin1 <- readRDS(here("data", "admin_units", "raw_gadm_shapefiles", "level1.rds"))
 admin1 <- admin1[!is.na(admin1$NAME_0), ]
 countries <- c("Afghanistan", "Djibouti", "Ethiopia", "India",  "Iran", "Myanmar", "Pakistan", "Saudi Arabia")
 admin1 <- admin1[admin1$NAME_0 %in% countries, ]
@@ -43,7 +43,7 @@ for (i in 1:nrow(admin1)) {
 saveRDS(admin1, here("data", "admin_units", "simplified_admin1.rds"))
 
 # Loading in admin 2 units, simplifying and saving
-admin2 <- readRDS(here("data", "raw_gadm_shapefiles/", "level2.rds"))
+admin2 <- readRDS(here("data", "admin_units", "raw_gadm_shapefiles", "level2.rds"))
 admin2 <- admin2[!is.na(admin2$NAME_0), ]
 countries <- c("Afghanistan", "Djibouti", "Ethiopia", "India",  "Iran", "Myanmar", "Pakistan", "Saudi Arabia")
 admin2 <- admin2[admin2$NAME_0 %in% countries, ]
@@ -56,22 +56,31 @@ for (i in 1:nrow(admin2)) {
 saveRDS(admin2, here("data", "admin_units", "simplified_admin2.rds"))
 
 # Saving Admin 1 and Admin2 unit names for each country to assist with geolocation
-admin1_csv <- data.frame(country = simple_admin_1$NAME_0, admin1 = simple_admin_1$NAME_1, 
-                         id = simple_admin_1$GID_1, type = simple_admin_1$TYPE_1, alt_names = simple_admin_1$VARNAME_1)
+admin1_csv <- data.frame(country = admin1$NAME_0, admin1 = admin1$NAME_1, 
+                         id = admin1$GID_1, type = admin1$TYPE_1, alt_names = admin1$VARNAME_1)
 
-admin2_csv <- data.frame(country = simple_admin_2$NAME_0, 
-                         admin1 = simple_admin_2$NAME_1, id1 = simple_admin_2$GID_1,
-                         admin2 = simple_admin_2$NAME_2, id2 = simple_admin_2$GID_2,
-                         type = simple_admin_2$TYPE_2, alt_names = simple_admin_2$VARNAME_2)
+admin2_csv <- data.frame(country = admin2$NAME_0, 
+                         admin1 = admin2$NAME_1, id1 = admin2$GID_1,
+                         admin2 = admin2$NAME_2, id2 = admin2$GID_2,
+                         type = admin2$TYPE_2, alt_names = admin2$VARNAME_2)
 
 write.csv(admin1_csv, file = here("data", "admin_units", "admin1_details.csv"), row.names = FALSE)
 write.csv(admin2_csv, file = here("data", "admin_units", "admin2_details.csv"), row.names = FALSE)
 
 # Initialise rgee -  See https://github.com/r-spatial/rgee for more details about installation and getting things working
+reticulate::py_version()
+reticulate::conda_version()
+
+library(rgee); library(reticulate)
+# ee_clean_pyenv()
+# reticulate::conda_list()
+# reticulate::conda_remove("rgee")
+# ee_install()
 ee_Initialize()
-#py_install("geemap")
-gm <- import("geemap")
+# rgee::ee_install_upgrade()
+# py_install("geemap")
 ee_check() # Check non-R dependencies
+gm <- import("geemap")
 
 # Load metadata and admin 2 units
 metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
@@ -127,6 +136,61 @@ for (i in 1:nrow(metadata)) {
   x$time_series_id <- metadata$id[i]
   
   write.csv(x, file = here("data", "location_specific_rainfall", paste0("rainfall_ts", metadata$id[i], ".csv")), row.names = FALSE)
+  
+  print(c(i, dim(x)[1]))
+  
+}
+
+# Extracting ERA5 2m Air Temperature
+for (i in 1:nrow(metadata)) {
+  
+  # Get years that the study spans
+  years <- seq(metadata$start[i], metadata$end[i], 1)
+  num_years <- length(years)
+  for (j in 1:length(years)) {
+    if (years[j] < 1981) {
+      years[j] <- 1981
+    }
+  }
+  years <- unique(years)
+  start_date <- paste0(years[1], "-01-01")
+  end_date <- paste0(years[length(years)] + 1, "-01-01")
+  
+  # Get relevant admin 2 unit and convert to sf object
+  if(!is.na(metadata$admin2[i])) {
+    metadata_admin <- metadata$admin2[i]
+    admin_2_data <- admin2[admin2$NAME_2 == metadata_admin, ]
+    admin_geometry <- st_as_sf(admin_2_data)
+  } else {
+    metadata_admin <- metadata$admin1[i]
+    admin_1_data <- admin1[admin1$NAME_1 == metadata_admin, ]
+    admin_geometry <- st_as_sf(admin_1_data)
+  }
+  
+  # Extract rainfall for that location
+  air_temp <- ee$ImageCollection("ECMWF/ERA5/DAILY") %>%
+    ee$ImageCollection$filterDate(start_date, end_date) %>%
+    ee$ImageCollection$map(function(x) x$select("mean_2m_air_temperature")) %>% # Select only precipitation bands
+    ee$ImageCollection$toBands() # from imagecollection to image
+  air_temp_extract <- ee_extract(x = air_temp, y = admin_geometry, sf = FALSE)
+  
+  # Process rainfall into right format
+  first_entry <- min(grep("mean_2m_air_temperature", colnames(air_temp_extract)))
+  x <- air_temp_extract %>%
+    pivot_longer(cols = starts_with("X"), names_to = "day", values_to = "mean_2m_air_temperature")
+  x$day <- gsub("X", "", x$day)
+  x$day <- gsub("_mean_2m_air_temperature", "", x$day)
+  x$day <- as.Date(x$day, format = "%Y%m%d")
+  x$daymonth_id <- format(x$day, "%m-%d")
+  days <- x$day
+  x <- x %>%
+    group_by(daymonth_id) %>%
+    summarise(mean_2m_air_temperature = mean(mean_2m_air_temperature, na.rm = TRUE))
+  x$day <- days[1:nrow(x)]
+  x$time_series_id <- metadata$id[i]
+  x$mean_2m_air_temperature_celsius <- x$mean_2m_air_temperature - 273.15 # convert kelvin to celsius
+  
+  write.csv(x, file = here("data", "location_specific_airtemp", paste0("airtemp_ts", metadata$id[i], ".csv")), row.names = FALSE)
   
   print(c(i, dim(x)[1]))
   
