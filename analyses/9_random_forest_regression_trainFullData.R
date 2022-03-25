@@ -184,7 +184,7 @@ no_ups_profile_plots <- ggplot(no_ups_summary_vip_results, aes(x = x, y = mean, 
   theme(legend.position = "none") +
   labs(x = "Covariate Value", y = "Average Prediction")
 
-x <- bind_rows(iterations$importance) %>%
+x <- bind_rows(no_ups$importance) %>%
   group_by(Variable) %>%
   summarise(mean = mean(Importance),
             sd = sd(Importance),
@@ -198,8 +198,12 @@ labs <- gsub("seasonality", "seas.", labs)
 labs <- gsub("temperature", "temp.", labs)
 labs <- gsub("population", "pop.", labs)
 
-var_imp_plot <- ggplot(x, aes(x= reorder(Variable, mean), y = mean)) +
+var_imp_plot <- ggplot(x, aes(x= reorder(Variable, mean), y = mean, fill = mean)) +
   geom_bar(stat="identity") +
+  geom_errorbar(aes(ymin = pmax(0, mean - 1.96 * sd),
+                    ymax = mean + 1.96 * sd),
+                width = 0.5) +
+  scale_fill_continuous(low = "grey", high = "#E14545") +
   theme_bw() +
   scale_x_discrete(labels = rev(labs)) +
   labs(x = "") +
@@ -208,7 +212,7 @@ var_imp_plot <- ggplot(x, aes(x= reorder(Variable, mean), y = mean)) +
 
 preds <- matrix(nrow = 25, ncol = 65)
 for (i in 1:25) {
-  temp <- iterations$test_predictions[[i]]
+  temp <- no_ups$test_predictions[[i]]
   preds[i, ] <- temp
 }
 
