@@ -261,30 +261,36 @@ overall_pv3 <- overall_pv2 %>%
                                  ifelse(airtemp <= 15, "too_low", "fine"))) %>%
   mutate(lagged_timepoint = ifelse(timepoint + 2 <= 25, timepoint + 2, (timepoint + 2) - 25))
 
-lag <- 2
+cluster <- readRDS("data/systematic_review_results/cluster_membership.rds") %>%
+  select(id, cluster)
 overall_pv3_subset <- overall_pv3 %>%
-  filter(id %in% c(6, 19, 22, 36, 37, 52, 55, 63, 64, 65, 73)) 
+  left_join(cluster, by = "id") %>%
+  filter(cluster == 2)
+  #filter(id %in% c(6, 19, 22, 36, 37, 52, 55, 63, 64, 65, 73)) 
 
 coef <- 0.0043
-int <- 12
-ggplot(data = overall_pv3_subset) +
-  geom_line(aes(x = timepoint, y = norm_vector_dens, col = factor(country))) +
+add <- 10 * 120 * 25/12
+airtemp_dens_plot <- ggplot(data = overall_pv3_subset) +
+  geom_line(aes(x = timepoint, y = 100 * 25/12 * norm_vector_dens, col = factor(country))) +
   facet_wrap(~id, scales = "free_y") +
-  scale_y_continuous(limits=c(0, 0.11), position = "left",
-                     sec.axis = sec_axis(trans=~int + ./coef, name = "Air Temp")) +
+  scale_y_continuous(limits=c(0, 0.11 * 100 * 25/12), position = "left",
+                     sec.axis = sec_axis(trans=~((add + ./coef)/(100 * 25/12)), name = "Air Temp (Degrees Celsius)")) +
   scale_x_continuous(labels = c("J", "F", "M", "A", "M", "J", 
                                 "J", "A", "S", "O", "N", "D"),
                      breaks = seq(2, 24, length.out = 12)) +
-  geom_line(aes(x = lagged_timepoint, y = coef * (airtemp - int))) +
+  geom_line(aes(x = lagged_timepoint, y = ((airtemp*(100 * 25/12)) - add) * coef)) +
   scale_fill_manual(values = gg_color_hue(6)) +
   scale_colour_manual(values = gg_color_hue(6)) +
-  ylab("Monthly Catch") +
+  ylab("Normalised Monthly Density") +
   theme_bw() +
   theme(legend.position = "bottom",
-        axis.title.x = element_blank())
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_blank()) +
+  guides(col = guide_legend(title = "Country"))
+ggsave(filename = here("figures/Supp_Figure_AirTemp_and_Density_TS_Plot.pdf"), 
+       plot = airtemp_dens_plot, width = 10, height = 7)
 
-cluster <- readRDS("data/systematic_review_results/cluster_membership.rds") %>%
-  select(id, cluster)
 overall_pv3_subset <- overall_pv3 %>%
   left_join(cluster, by = "id") %>%
   filter(cluster == 1)
@@ -329,79 +335,7 @@ d <- ggplot(data = overall_pv5) +
   labs(x = "Rainfall", y = "Norm. Vector Density") +
   coord_cartesian(ylim = dens_lims_rain_y, xlim = dens_lims_rain_x)
 
-cowplot::plot_grid(a, b, c, d, nrow = 2)
-
-##############################################
-ggplot(data = overall_pv3_subset) +
-  geom_line(aes(x = timepoint, y = norm_vector_dens, col = factor(id)), size = 2)
-
-
-
-plot(overall_pv3_subset$airtemp,
-     overall_pv3_subset$norm_vector_dens)
-
-# ggplot(data = overall_pv3_subset) +
-#   geom_path(aes(x = timepoint, y = mean, col = factor(country)), size = 2) +
-#   geom_point(aes(x = timepoint, y = raw_catch, group = factor(id)), col = "black") +
-#   facet_wrap(~id, scales = "free_y") +
-#   scale_y_continuous(limits=c(0, NA), position = "left",
-#                      sec.axis = sec_axis(trans=~int + ./coef, name = "Surface Temp")) +
-#   scale_x_continuous(labels = c("J", "F", "M", "A", "M", "J", 
-#                                 "J", "A", "S", "O", "N", "D"),
-#                      breaks = seq(2, 24, length.out = 12)) +
-#   geom_line(aes(x = timepoint, y = coef * (airtemp - int))) +
-#   scale_fill_manual(values = gg_color_hue(6)) +
-#   scale_colour_manual(values = gg_color_hue(6)) +
-#   ylab("Monthly Catch") +
-#   theme_bw() +
-#   theme(legend.position = "bottom",
-#     axis.title.x = element_blank(),
-#     strip.background = element_blank(),
-#     strip.text = element_blank(),
-#     legend.justification = c(1, 0)) 
-
-ggplot(data = overall_pv2_subset) +
-  geom_path(aes(x = timepoint, y = airtemp), size = 2) +
-  facet_wrap(~id, scales = "free_y")
-
-
-
-summary <- overall_pv3 %>%
-  group_by(airtemp_thresh) %>%
-  summarise(mean = mean(norm_vector_dens, na.rm = TRUE),
-            n = n())
-
-mean_airtemp_dens <- overall_pv3 %>%
-  filter(!is.na(airtemp)) %>%
-  group_by(bin_airtemp, bin_airtemp2) %>%
-  summarise(mean_norm_vd = mean(norm_vector_dens))
-ggplot(mean_airtemp_dens, aes(x = bin_airtemp2, y = mean_norm_vd)) +
-  geom_line()
-
-
-plot(overall_pv2$airtemp, overall_pv2$norm_vector_dens)
-  
-norm_rainfall_storage <- normalise_total(rainfall_storage)
-smoothed_rainfall <- t(apply(norm_rainfall_storage, 1, raster::movingFun, n = 4, circular = TRUE))
-rainfall_start_index <- apply(smoothed_rainfall, 1, function(x) which(x == max(x)))
-rainfall_seas_3 <- apply(norm_rainfall_storage, 1, percent_incidence, 3, 2)
-rainfall_seas_4 <- apply(norm_rainfall_storage, 1, percent_incidence, 4, 2)
-
-
-
-
-# Reordering mean fitted time-series to start at max
-reordered_mean_realisation <- matrix(nrow = length(retain_index), ncol = (12 * interpolating_points + 1))
-start_index <- apply(mean_realisation, 1, function(x) which(x == max(x)))
-end_index <- dim(reordered_mean_realisation)[2]
-for (i in 1:length(retain_index)) {
-  reordered_mean_realisation[i, ] <- mean_realisation[i, c(start_index[i]:end_index, 1:(start_index[i]-1))]
-}
-
-
-# Reordering rainfall time-series to start at max of vector density (note NOT max rainfall, which is what I calculate above)
-reordered_rainfall <- matrix(nrow = length(retain_index), ncol = length(months_length))
-end_rain_index <- dim(reordered_rainfall)[2]
-for (i in 1:length(retain_index)) {
-  reordered_rainfall[i, ] <- norm_rainfall_storage[i, c(start_index[i]:end_rain_index, 1:(start_index[i]-1))]
-}
+air_rain_relationship_plot <- cowplot::plot_grid(a, b, c, d, nrow = 2)
+ggsave(file = here("figures/Supp_Figure_AirTemp_Rainfall_VecDens_Relationship.pdf"),
+       plot = air_rain_relationship_plot,
+       width = 8, height = 5.5)
