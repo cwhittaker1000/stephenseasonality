@@ -272,10 +272,10 @@ overall_pv3_subset <- overall_pv3 %>%
 
 coef <- 0.0043
 add <- 10 * 120 * 25/12
-airtemp_dens_plot <-ggplot(data = overall_pv3_subset) +
+airtemp_dens_plot <- ggplot(data = overall_pv3_subset) +
   geom_line(aes(x = timepoint, y = 100 * 25/12 * norm_vector_dens, col = factor(country))) +
   facet_wrap(~id, scales = "free_y") +
-  geom_line(aes(x = timepoint, y = 20 * norm_rainfall), col = "grey", linetype = "dashed") +
+  geom_line(aes(x = lagged_timepoint, y = 20 * norm_rainfall), col = "grey", linetype = "dashed") +
   scale_y_continuous(limits=c(0, 0.11 * 100 * 25/12), position = "left",
                      sec.axis = sec_axis(trans=~((add + ./coef)/(100 * 25/12)), name = "Air Temp (Degrees Celsius)")) +
   scale_x_continuous(labels = c("J", "F", "M", "A", "M", "J", 
