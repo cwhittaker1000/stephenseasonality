@@ -417,6 +417,9 @@ set.seed(16)
 z <- data.frame(id = c(rep("dens", 65), rep("rain", 65)),
                 per_ind = c(features_df$per_ind_4_months, features_df$rainfall_seas_4),
                 cluster = c(cluster_membership, cluster_membership))
+t.test(per_ind ~ factor(cluster), data = z[z$id == "dens", ])
+t.test(per_ind ~ factor(cluster), data = z[z$id == "rain", ])
+
 cluster_catch_seasonality <- ggplot(z, aes(x = factor(cluster), y = 100 * per_ind, col = factor(cluster)))  +
   geom_boxplot(fill = NA, outlier.shape = NA) +
   facet_wrap(~id, nrow = 2, strip.position = "right",

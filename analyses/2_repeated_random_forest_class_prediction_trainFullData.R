@@ -375,6 +375,8 @@ for (i in 1:(dim(normalised_output)[1])) {
 }
 
 # Extracting and Standardising (By Peak Timing) Dynamics By Rural/Urban Stratification
+chisq.test(overall$city, overall$cluster)
+
 urban <- normalised_output[urban_rural == "Urban", ]
 urban_start_index <- apply(urban, 1, function(x) which(x == max(x)))
 urban_mat <- matrix(nrow = dim(urban)[1], ncol = dim(urban)[2])
