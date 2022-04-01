@@ -340,9 +340,13 @@ one_total <- total_raw_catch$total_raw[one]
 two <- cluster_membership == 2
 two_total <- total_raw_catch$total_raw[two]
 median(one_total)
+IQR(one_total)
+quantile(one_total, probs = c(0.25, 0.75))
 median(two_total)
 mean(one_total)
 mean(two_total)
+quantile(two_total, probs = c(0.25, 0.75))
+
 
 df_catch_size <- data.frame(total_raw_catch, cluster = factor(cluster_membership))
 catch_size_hist <- ggplot(df_catch_size, aes(x = log(total_raw))) +

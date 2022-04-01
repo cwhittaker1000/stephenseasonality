@@ -197,6 +197,13 @@ max_red <- reduction %>%
   ungroup() %>%
   filter(inc_red == max_inc_red)
 
+max_red_mean <- max_red %>%
+  mutate(insecticide = factor(insecticide)) %>%
+  dplyr::group_by(insecticide) %>%
+  dplyr::summarise(mean_inc_red = mean(max_inc_prop_red),
+                   low = min(max_inc_prop_red),
+                   high = max(max_inc_prop_red))
+
 # Generating estimates of profile seasonality 
 seasonality <- c()
 for (i in 1:(length(steph_seasonality_list))) {
