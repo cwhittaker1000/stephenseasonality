@@ -1,7 +1,7 @@
 # Loading Required Libraries
 library(tidyverse); library(sf); library(tidymodels)
 library(sp); library(raster); library(rgeos); library(rgdal); library(maptools); library(dplyr); 
-library(tidyr); library(maps);library(scales); library(here); library(zoo)
+library(tidyr); library(maps);library(scales); library(here); library(zoo); library(RColorBrewer)
 
 # Loading in custom functions
 source(here("functions", "time_series_characterisation_functions.R"))
@@ -87,39 +87,63 @@ normalised_monthly_vector_density <- t(apply(monthly_vector_density, 1, normalis
 EIR <- 5
 sporozoite_prev <- 0.05
 ABR <- EIR/sporozoite_prev
-num_months_sampled <- c(1, 2, 3, 4, 5, 6) # varying effort 
-num_nights_per_month <- c(1, 2, 3, 4, 5, 6) # varying effort
+num_months_sampled <- 1:12 # varying effort 
+num_nights_per_month <- 1:10 # varying effort
 
 # For single time series and contiguous sampling (so 12 possible combinations of sampled months all differing
 # by starting point)
-prob_not_sampled <- array(data = NA, dim = c(6, 6, 12))
-monthly_density <- normalised_monthly_vector_density[1, ]
-monthly_prob_sampled <- test_month_dens * ABR/c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31) # not sure if this is quite right - need to double check
-for (i in 1:length(num_months_sampled)) {
-
-  # Extract num months to be sampled and Generate matrix of all possible contiguous months to sample at 
-  months_sampled <- num_months_sampled[i]
-  sampling_mat <- matrix(0, 12, months_sampled)
-  sampling_mat <- col(sampling_mat) + row(sampling_mat) - 1
-  sampling_mat[sampling_mat > 12] <- sampling_mat[sampling_mat > 12] - 12
+prob_not_sampled <- array(data = NA, dim = c(65, 12, 10, 12))
+for (t in 1:65) {
   
-  # Extract num nights sampling per month for each run and duplicate entries in matrix as required
-  for (j in 1:length(num_nights_per_month)) {
+  monthly_density <- normalised_monthly_vector_density[t, ]
+  monthly_prob_sampled <- monthly_density * ABR/c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31) # not sure if this is quite right - need to double check
+  for (i in 1:length(num_months_sampled)) {
     
-    nights_per_month <- num_nights_per_month[j]
-    if (months_sampled == 1 & nights_per_month == 1) {
-      overall_sampling_mat <- t(t(apply(sampling_mat, 1, rep, each = nights_per_month)))
-    } else {
-      overall_sampling_mat <- t(apply(sampling_mat, 1, rep, each = nights_per_month))
-    }
+    # Extract num months to be sampled and Generate matrix of all possible contiguous months to sample at 
+    months_sampled <- num_months_sampled[i]
+    sampling_mat <- matrix(0, 12, months_sampled)
+    sampling_mat <- col(sampling_mat) + row(sampling_mat) - 1
+    sampling_mat[sampling_mat > 12] <- sampling_mat[sampling_mat > 12] - 12
     
-    for (k in 1:12) {
-      temp_probs <-  monthly_prob_sampled[overall_sampling_mat[k, ]]
-      prob_not_sampled[i, j, k] <- prod(1 - temp_probs)
+    # Extract num nights sampling per month for each run and duplicate entries in matrix as required
+    for (j in 1:length(num_nights_per_month)) {
+      
+      nights_per_month <- num_nights_per_month[j]
+      if (months_sampled == 1 & nights_per_month == 1) {
+        overall_sampling_mat <- t(t(apply(sampling_mat, 1, rep, each = nights_per_month)))
+      } else {
+        overall_sampling_mat <- t(apply(sampling_mat, 1, rep, each = nights_per_month))
+      }
+      
+      for (k in 1:12) {
+        temp_probs <-  monthly_prob_sampled[overall_sampling_mat[k, ]]
+        temp_probs[temp_probs > 1] <- 1
+        prob_not_sampled[t, i, j, k] <- prod(1 - temp_probs)
+      }
     }
   }
+  print(t)
 }
 
+# 1st dim is the time series
+# 2nd dim is the number of months sampled
+# 3rd dim is the number of nights per month sampled
+# 4th dim is which month you start at 
+temp <- data.frame(1 - prob_not_sampled[1, 1:6, 1:6, 7])
+temp$Y <- paste0("Y", 1:6)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:6))
+temp_long <- temp %>%
+  pivot_longer(cols = -Y, names_to = "X")
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+ggplot(temp_long) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(#limits = rev(unique(y$col_nums)),
+                   position = "right",
+                   labels = 1:10) +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_discrete(labels =  1:12) + #month.abb
+  labs(y = "Sampling Days Per Month",
+       x = "Number of Months Sampled")
 
 # Reordering mean fitted time-series to start at max
 reordered_mean_realisation <- matrix(nrow = length(id), ncol = (12 * interpolating_points + 1))
