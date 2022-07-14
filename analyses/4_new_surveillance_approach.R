@@ -48,6 +48,15 @@ for (i in 1:length(id)) {
   overdisp[i] <- mean(MCMC_output[, "overdispersion"])
 }
 
+# Reordering
+reordered_mean_realisation <- matrix(nrow = 65, ncol = (12 * interpolating_points + 1))
+start_index <- apply(mean_realisation, 1, function(x) which(x == max(x)))
+start_index_month <- round(start_index/25 * 12)
+end_index <- dim(reordered_mean_realisation)[2]
+for (i in 1:65) {
+  reordered_mean_realisation[i, ] <- mean_realisation[i, c(start_index[i]:end_index, 1:(start_index[i]-1))]
+}
+
 # Interpolate to Get Daily Biting Rate and then Normalise By Total Density
 approx_min_output <- function(x) {
   temp <- approx(x, n = 365)
@@ -145,88 +154,42 @@ ggplot(temp_long) +
   labs(y = "Sampling Days Per Month",
        x = "Number of Months Sampled")
 
-# Reordering mean fitted time-series to start at max
-reordered_mean_realisation <- matrix(nrow = length(id), ncol = (12 * interpolating_points + 1))
-start_index <- apply(normalised_output, 1, function(x) which(x == max(x)))
-end_index <- dim(reordered_mean_realisation)[2]
-for (i in 1:length(id)) {
-  reordered_mean_realisation[i, ] <- normalised_output[i, c(start_index[i]:end_index, 1:(start_index[i]-1))]
-}
-one_output <- reordered_mean_realisation[cluster_membership$cluster == 1, ]
-mean_one_output <- apply(one_output, 2, mean)
+plot(reordered_mean_realisation[6, ])
+lines(mean_realisation[1, ])
 
-two_output <- reordered_mean_realisation[cluster_membership$cluster == 2, ]
-mean_two_output <- apply(two_output, 2, mean)
+peak_month <- start_index_month[6] # for time series 1, peak month is month 6
 
-aug_norm_output <- rbind(normalised_output, mean_one_output, mean_two_output)
+temp <- data.frame(1 - prob_not_sampled[6, 1:6, 1:6, peak_month])
+temp$Y <- paste0("Y", 1:6)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:6))
+temp_long <- temp %>%
+  pivot_longer(cols = -Y, names_to = "X")
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+ggplot(temp_long) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(#limits = rev(unique(y$col_nums)),
+    position = "right",
+    labels = 1:10) +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_discrete(labels =  1:12) + #month.abb
+  labs(y = "Sampling Days Per Month",
+       x = "Number of Months Sampled")
 
-summary_probs <- array(dim = c(length(id) + 2, 12, 3))
-p_overall <- 1
-for (k in 1:67) {
-  
-  # Generating Monthly Relative Probabilities of Finding Stephensi and Multiplying By Defined Overall Prob Detection Given Present
-  time_series <- aug_norm_output[k, ]
-  avg_month_prob <- vector(mode = "numeric", length = 12L)
-  counter <- 1
-  for (i in 1:length(avg_month_prob)) {
-    if (i < 12) {
-      avg_month_prob[i] <- mean(time_series[c(counter, counter + 1)])
-      counter <- counter + 2
-    } else {
-      avg_month_prob[i] <- mean(time_series[c(counter, counter + 1, counter + 2)])
-      counter <- counter + 2
-    }
-  }
-  p_zero_caught <- 1 - (avg_month_prob/max(avg_month_prob) * p_overall) # option1 <- Alt = 1 - (test * 0.5)
-  
-  # Iterating Over All Possible Start Months and All Possible Number of Consecutive Months Sampled
-  #   rows are the month we start at
-  #   columns are the number of months we consider
-  prob_matrix <- matrix(data = NA, nrow = 12, ncol = 12)
-  for (i in 1:12) {
-    for (j in 1:12) {
-      if ((i+j-1) > 12) {
-        indices <- c(i:12, 1:(j - length(i:12)))
-      } else {
-        indices <- i:(i+j-1)
-      }
-      temp_p <- prod(p_zero_caught[indices])
-      prob_matrix[i, j] <- temp_p
-    }
-  }
-  temp_median_prob <- apply(prob_matrix, 2, quantile, prob = c(0.25, 0.5, 0.75))
-  summary_probs[k, , ] <- t(temp_median_prob)
-  print(k)
-}
 
-lower_probs <- summary_probs[1:65, , 1]
-median_probs <- summary_probs[1:65, , 2]
-upper_probs <- summary_probs[1:65, , 3]
+temp2 <- data.frame(1 - apply(prob_not_sampled[6, 1:6, 1:6, 1:12], c(1, 2), mean)) # average for the year
+temp2$Y <- paste0("Y", 1:6)
+temp2$Y <- factor(temp2$Y, levels = paste0("Y", 1:6))
+temp_long2 <- temp2 %>%
+  pivot_longer(cols = -Y, names_to = "X")
+temp_long2$X  <- factor(temp_long2$X, levels = colnames(temp2)[-length(colnames(temp2))])
+ggplot(temp_long2) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(#limits = rev(unique(y$col_nums)),
+    position = "right",
+    labels = 1:10) +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_discrete(labels =  1:12) + #month.abb
+  labs(y = "Sampling Days Per Month",
+       x = "Number of Months Sampled")
 
-cluster_one_median <- data.frame(time = seq(1, 12), median = summary_probs[66, , 2], lower = summary_probs[66, , 1], upper = summary_probs[66, , 3])
-cluster_two_median <- data.frame(time = seq(1, 12), median = summary_probs[67, , 2], lower = summary_probs[67, , 1], upper = summary_probs[67, , 3])
-
-median_summary <- data.frame(id = rep(id, 3), stat = c(rep("med", 65), rep("low", 65), rep("high", 65)),
-                             cluster = rep(cluster_membership$cluster, each = 3), 
-                             rbind(median_probs, lower_probs, upper_probs)) %>%
-  pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
-  mutate(time = as.numeric(gsub("X", "", time))) %>%
-  group_by(time, stat, cluster) %>%
-  summarise(median = median(prob),
-            lower = min(prob),
-            upper = max(prob)) %>%
-  pivot_wider(names_from = "stat", 
-              values_from = median:upper)#
-medians <- data.frame(id = id, median_probs) %>%
-  pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
-  mutate(time = as.numeric(gsub("X", "", time)))
-
-fig4c <- ggplot(median_summary) +
-  geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med, fill = factor(cluster)), alpha = 0.1) +
-  geom_path(aes(x = time, y = median_med, colour = factor(cluster)), size = 1) +
-  scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
-  scale_fill_manual(values = palette()[2:1]) + 
-  scale_colour_manual(values = palette()[2:1]) + 
-  labs(y = "Probability of Missing Anopheles Stephensi", x = "Number of Consecutive Months Sampled") +
-  theme_bw() +
-  theme(legend.position = "none")
+temp[, -7]/temp2[, -7]
