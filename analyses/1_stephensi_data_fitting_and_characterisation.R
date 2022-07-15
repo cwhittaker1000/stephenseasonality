@@ -108,7 +108,9 @@ metadata <- raw_df[retain_index, ] %>%
          start = Year.Start, end = Year.End)
 overall <- cbind(metadata, new_df[retain_index, ])
 colnames(overall)[8:19] <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-saveRDS(overall, file = here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
+if (fresh_run) {
+  saveRDS(overall, file = here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds"))
+}
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -212,7 +214,9 @@ all_ts_plot <- ggplot(data = overall_pv) +
     strip.text = element_blank(),
     legend.justification = c(1, 0), legend.position = c(1, 0)) +
   guides(col = "none", fill = guide_legend(nrow = 1, ncol = 6, title = ""))
-ggsave2(file = here("figures", "Supp_Fig_AllTs.pdf"), plot = all_ts_plot, width = 16, height = 7, dpi = 500)
+if (fresh_run) {
+  ggsave2(file = here("figures", "Supp_Fig_AllTs.pdf"), plot = all_ts_plot, width = 16, height = 7, dpi = 500)
+}
   
 # Reordering mean fitted time-series to start at max
 reordered_mean_realisation <- matrix(nrow = length(retain_index), ncol = (12 * interpolating_points + 1))
@@ -303,7 +307,9 @@ for (i in 1:length(retain_index)) {
 features_df <- data.frame(id = metadata$id, country = metadata$country, admin1 = metadata$admin1, admin2 = metadata$admin2,
                           city = metadata$city, features, per_ind_3_months = per_ind_3_months_vector,
                           rainfall_seas_3 = rainfall_seas_3, rainfall_seas_4 = rainfall_seas_4)
-saveRDS(features_df, file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
+if (fresh_run) {
+  saveRDS(features_df, file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
+}  
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -347,7 +353,6 @@ mean(one_total)
 mean(two_total)
 quantile(two_total, probs = c(0.25, 0.75))
 
-
 df_catch_size <- data.frame(total_raw_catch, cluster = factor(cluster_membership))
 catch_size_hist <- ggplot(df_catch_size, aes(x = log(total_raw))) +
   geom_histogram(aes(fill = cluster)) +
@@ -367,7 +372,9 @@ catch_size_comparison <- ggplot(df_catch_size, aes(x = cluster_membership, y = l
 t.test(total_raw ~ cluster_membership, data = df_catch_size)
 mood.test(df_catch_size$total_raw[df_catch_size$cluster == 1], df_catch_size$total_raw[df_catch_size$cluster == 2])
 catch_size_plots <- cowplot::plot_grid(catch_size_comparison, catch_size_hist, nrow = 1, ncol = 2)
-cowplot::ggsave2(file = here("figures", "Supp_Fig_CatchSizeComparison.pdf"), plot = catch_size_plots, width = 11, height = 5, dpi = 500)
+if (fresh_run) {
+  cowplot::ggsave2(file = here("figures", "Supp_Fig_CatchSizeComparison.pdf"), plot = catch_size_plots, width = 11, height = 5, dpi = 500)
+}
 
 # Plotting the First 2 Principle Components
 
@@ -438,7 +445,9 @@ cluster_catch_seasonality <- ggplot(z, aes(x = factor(cluster), y = 100 * per_in
 
 cluster_boxplots <- cowplot::plot_grid(cluster_time_series, cluster_catch_seasonality, ncol = 2, rel_widths = c(2, 1), axis = "b", align = "h")
 fig2_overall <- cowplot::plot_grid(pca_plot, cluster_boxplots, ncol = 2, rel_widths = c(2, 2.2))
-ggsave(fig2_overall, file = here("figures", "Fig2_Overall_Raw.pdf"), width = 10, height = 5)
+if (fresh_run) {
+  ggsave(fig2_overall, file = here("figures", "Fig2_Overall_Raw.pdf"), width = 10, height = 5)
+}
 
 # Visualising the properties of each cluster
 pdf("Figures/Supp_Figure_Cluster_Properties.pdf", height = 5, width = 12, useDingbats = FALSE)
@@ -520,7 +529,9 @@ four_cluster <- ggplot() +
   scale_color_manual(values = palette()[6:3]) +
   labs(y = "Normalised Monthly Vector Density", x = "Peak-Standardised Time (Months)") +
   theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
-ggsave(four_cluster, file = here("figures", "Supp_Figure_Four_Cluster_Sensitivity.pdf"), width = 7, height = 5.8)
+if (fresh_run) {
+  ggsave(four_cluster, file = here("figures", "Supp_Figure_Four_Cluster_Sensitivity.pdf"), width = 7, height = 5.8)
+}
 
 mean_timings <- data.frame(features_df, cluster = cluster_membership) %>%
   group_by(cluster) %>%

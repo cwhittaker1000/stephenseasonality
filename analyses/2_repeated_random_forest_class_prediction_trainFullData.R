@@ -35,7 +35,6 @@ overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
 overall <- overall %>%
   left_join(cluster_membership, by = "id")
-# table(overall$cluster, overall$peaks)
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -452,8 +451,8 @@ for (i in 1:dim(ups)[1]) {
   final_random_forest_fit_ups <- ups$model[[i]]
   explainer_ups <- explain_tidymodels(
     model = final_random_forest_fit_ups,
-    data = dplyr::select(juiced_ups, -cluster),
-    y = as.numeric(juiced_ups$cluster),
+    data = dplyr::select(ups$juiced[[i]], -cluster),
+    y = as.numeric(ups$juiced[[i]]$cluster),
     verbose = FALSE)
   rem_ups <- which(colnames(explainer_ups$dat) == "country_peaks")
   pdp_ups <- model_profile(explainer_ups, variables = colnames(explainer_ups$data)[-rem_ups], N = NULL)
@@ -472,6 +471,7 @@ ups_profile_plots <- ggplot(ups_summary_vip_results, aes(x = x, y = mean, col = 
   geom_line() +
   geom_ribbon(aes(ymin = lower, ymax = upper, fill = var), alpha = 0.2, col = NA) +
   facet_wrap(~var, scale = "free_x") +
+  theme_bw() +
   theme(legend.position = "none") +
   labs(x = "Covariate Value", y = "Average Prediction")
 ggsave(filename = here("figures/Supp_Figure_Upsample_Covariate_Profiling.pdf"), plot = ups_profile_plots, width = 8, height = 8)
