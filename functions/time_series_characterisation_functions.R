@@ -130,6 +130,23 @@ von_mises_fitting <- function(normalised_output, plotting) {
   return(optimised_parameters)
 }
 
+approx_min_output <- function(x) {
+  temp <- approx(x, n = 365)
+  return(temp$y)
+}
+conv_daily_to_monthly <- function(x) {
+  month_length <- c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+  temp <- c()
+  for (i in 1:12) {
+    if (i == 1) {
+      temp <- c(temp, mean(x[1:month_length[i]]))
+    } else {
+      temp <- c(temp, mean(x[sum(month_length[1:(i-1)]):sum(month_length[1:i])]))
+    }
+  }
+  return(temp)
+}
+
 
 
 
