@@ -419,7 +419,8 @@ rain <- ggplot(x, aes(x = month_start, y = prob_detect, group = id, col = cluste
        title = "Sampling Based on Rainfall Timing")
 
 
-plot_grid(rain, vec, nrow = 1)
+plot_grid(rain + theme(legend.position = "none"), 
+          vec + theme(legend.position = "none"), nrow = 1)
 
 
 
