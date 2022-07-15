@@ -1,5 +1,5 @@
 # Loading Required Libraries
-library(tidyverse); library(sf); library(tidymodels)
+library(tidyverse); library(sf); library(tidymodels); library(cowplot)
 library(sp); library(raster); library(rgeos); library(rgdal); library(maptools); library(dplyr); 
 library(tidyr); library(maps);library(scales); library(here); library(zoo); library(RColorBrewer)
 
@@ -142,16 +142,17 @@ for (t in 1:65) {
 # 2nd dim is the number of months sampled
 # 3rd dim is the number of nights per month sampled
 # 4th dim is which month you start at 
-not_sampled_vector_peak_absolute_summary <- array(data = NA, dim = c(65, 6, 6))
-not_sampled_rainfall_peak_absolute_summary <- array(data = NA, dim = c(65, 6, 6))
-not_sampled_rainfall_peak_plus_absolute_summary <- array(data = NA, dim = c(65, 6, 6))
-not_sampled_annual_avg_absolute_summary <- array(data = NA, dim = c(65, 6, 6))
+dim <- 5
+not_sampled_vector_peak_absolute_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_rainfall_peak_absolute_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_rainfall_peak_plus_absolute_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_annual_avg_absolute_summary <- array(data = NA, dim = c(65, dim, dim))
 
-not_sampled_vector_annual_diff_summary <- array(data = NA, dim = c(65, 6, 6))
-not_sampled_vector_rainfall_diff_summary <- array(data = NA, dim = c(65, 6, 6))
-not_sampled_vector_rainfall_peak_plus_diff_summary <- array(data = NA, dim = c(65, 6, 6))
-not_sampled_rainfall_annual_diff_summary <- array(data = NA, dim = c(65, 6, 6))
-not_sampled_rainfall_peak_plus_annual_diff_summary <- array(data = NA, dim = c(65, 6, 6))
+not_sampled_vector_annual_diff_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_vector_rainfall_diff_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_vector_rainfall_peak_plus_diff_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_rainfall_annual_diff_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_rainfall_peak_plus_annual_diff_summary <- array(data = NA, dim = c(65, dim, dim))
 
 for (i in 1:65) {
   ts_peak_vector_month <- peak_density_month[i] 
@@ -159,120 +160,197 @@ for (i in 1:65) {
   ts_peak_rainfall_plus_month <- (ts_peak_rainfall_month + 1) %% 12
   ts_peak_rainfall_plus_month <- ifelse(ts_peak_rainfall_plus_month == 0, 12, ts_peak_rainfall_plus_month)
   
-  not_sampled_vector_peak_absolute_summary[i, 1:6, 1:6] <- 1- prob_not_sampled_poisson[i, 1:6, 1:6, ts_peak_vector_month]
-  not_sampled_rainfall_peak_absolute_summary[i, 1:6, 1:6] <- 1 - prob_not_sampled_poisson[i, 1:6, 1:6, ts_peak_rainfall_month]
-  not_sampled_rainfall_peak_plus_absolute_summary[i, 1:6, 1:6] <- 1 - prob_not_sampled_poisson[i, 1:6, 1:6, ts_peak_rainfall_plus_month]
-  not_sampled_annual_avg_absolute_summary[i, 1:6, 1:6] <- 1 - apply(prob_not_sampled_poisson[i, 1:6, 1:6, 1:12], c(1, 2), mean)
+  not_sampled_vector_peak_absolute_summary[i, 1:dim, 1:dim] <- 1- prob_not_sampled_poisson[i, 1:dim, 1:dim, ts_peak_vector_month]
+  not_sampled_rainfall_peak_absolute_summary[i, 1:dim, 1:dim] <- 1 - prob_not_sampled_poisson[i, 1:dim, 1:dim, ts_peak_rainfall_month]
+  not_sampled_rainfall_peak_plus_absolute_summary[i, 1:dim, 1:dim] <- 1 - prob_not_sampled_poisson[i, 1:dim, 1:dim, ts_peak_rainfall_plus_month]
+  not_sampled_annual_avg_absolute_summary[i, 1:dim, 1:dim] <- 1 - apply(prob_not_sampled_poisson[i, 1:dim, 1:dim, 1:12], c(1, 2), mean)
   
-  not_sampled_vector_annual_diff_summary[i, 1:6, 1:6] <- not_sampled_vector_peak_absolute_summary[i, 1:6, 1:6] - not_sampled_annual_avg_absolute_summary[i, 1:6, 1:6]
-  not_sampled_vector_rainfall_diff_summary[i, 1:6, 1:6] <- not_sampled_vector_peak_absolute_summary[i, 1:6, 1:6] - not_sampled_rainfall_peak_absolute_summary[i, 1:6, 1:6]
-  not_sampled_vector_rainfall_peak_plus_diff_summary[i, 1:6, 1:6] <- not_sampled_vector_peak_absolute_summary[i, 1:6, 1:6] - not_sampled_rainfall_peak_plus_absolute_summary[i, 1:6, 1:6]
-  not_sampled_rainfall_annual_diff_summary[i, 1:6, 1:6] <- not_sampled_rainfall_peak_absolute_summary[i, 1:6, 1:6] - not_sampled_annual_avg_absolute_summary[i, 1:6, 1:6]
-  not_sampled_rainfall_peak_plus_annual_diff_summary[i, 1:6, 1:6] <- not_sampled_rainfall_peak_plus_absolute_summary[i, 1:6, 1:6] - not_sampled_annual_avg_absolute_summary[i, 1:6, 1:6]
+  not_sampled_vector_annual_diff_summary[i, 1:dim, 1:dim] <- not_sampled_vector_peak_absolute_summary[i, 1:dim, 1:dim] - not_sampled_annual_avg_absolute_summary[i, 1:dim, 1:dim]
+  not_sampled_vector_rainfall_diff_summary[i, 1:dim, 1:dim] <- not_sampled_vector_peak_absolute_summary[i, 1:dim, 1:dim] - not_sampled_rainfall_peak_absolute_summary[i, 1:dim, 1:dim]
+  not_sampled_vector_rainfall_peak_plus_diff_summary[i, 1:dim, 1:dim] <- not_sampled_vector_peak_absolute_summary[i, 1:dim, 1:dim] - not_sampled_rainfall_peak_plus_absolute_summary[i, 1:dim, 1:dim]
+  not_sampled_rainfall_annual_diff_summary[i, 1:dim, 1:dim] <- not_sampled_rainfall_peak_absolute_summary[i, 1:dim, 1:dim] - not_sampled_annual_avg_absolute_summary[i, 1:dim, 1:dim]
+  not_sampled_rainfall_peak_plus_annual_diff_summary[i, 1:dim, 1:dim] <- not_sampled_rainfall_peak_plus_absolute_summary[i, 1:dim, 1:dim] - not_sampled_annual_avg_absolute_summary[i, 1:dim, 1:dim]
 }
 
-apply(not_sampled_annual_avg_peak_diff_summary, c(2, 3), mean)
-apply(not_sampled_rainfall_peak_diff_summary, c(2, 3), mean)
-apply(not_sampled_vector_rainfall_peak_plus_diff_summary, c(2, 3), mean)
-
-apply(not_sampled_vector_peak_absolute_summary, c(2, 3), mean)/
-  apply(not_sampled_annual_avg_absolute_summary, c(2, 3), mean)
-
-apply(not_sampled_vector_peak_absolute_summary, c(2, 3), mean)/
-  apply(not_sampled_rainfall_peak_absolute_summary, c(2, 3), mean)
-
-
-
-apply(not_sampled_annual_avg_peak_diff_summary, c(2, 3), mean)
-apply(not_sampled_annual_avg_peak_diff_summary, c(2, 3), mean)/apply(not_sampled_annual_avg_absolute_summary, c(2, 3), mean)
-
-
-which(not_sampled_rainfall_peak_ratio_summary[, 1, 1] == max(not_sampled_rainfall_peak_ratio_summary[, 1, 1]))
-
-hist(not_sampled_rainfall_peak_ratio_summary[, 1, 1], xlim = c(0, ))
-
-
-not_sampled_vector_peak_absolute_summary[1, , ]
-not_sampled_annual_avg_absolute_summary[1, , ]
-
-# peak vector
-temp <- data.frame(1 - prob_not_sampled_poisson[6, 1:6, 1:6, ts_peak_vector_month])
-temp$Y <- paste0("Y", 1:6)
-temp$Y <- factor(temp$Y, levels = paste0("Y", 1:6))
+size <- 12
+temp <- apply(not_sampled_annual_avg_absolute_summary, c(2, 3), mean)
+temp <- data.frame(temp)
+temp$Y <- paste0("Y", 1:dim)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:dim))
 temp_long <- temp %>%
   pivot_longer(cols = -Y, names_to = "X")
 temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
-ggplot(temp_long) +
+a <- ggplot(temp_long) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(#limits = rev(unique(temp_long$X)),
+                   position = "left",
+                   labels = 1:dim) +
+  scale_fill_viridis_c(option = "magma", name = "p(detect)",
+                       limits = c(0, 1)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) + #month.abb
+  labs(y = "Sampling Days Per Month",
+       x = "Number of Months Sampled",
+       title = "Probability of detecting Anopheles\nstephensi when starting sampling\nat random month") 
+
+temp <- apply(not_sampled_rainfall_peak_absolute_summary, c(2, 3), mean)
+temp <- data.frame(temp)
+temp$Y <- paste0("Y", 1:dim)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:dim))
+temp_long <- temp %>%
+  pivot_longer(cols = -Y, names_to = "X")
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+d <- ggplot(temp_long) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(#limits = rev(unique(temp_long$X)),
+    position = "left",
+    labels = 1:dim) +
+  scale_fill_viridis_c(option = "magma", name = "p(detect)",
+                       limits = c(0, 1)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) + #month.abb
+  labs(y = "Sampling Days Per Month",
+       x = "Number of Months Sampled",
+       title = "Probability of detecting Anopheles\nstephensi when starting sampling\nat peak rainfall month") 
+
+temp <- apply(not_sampled_vector_peak_absolute_summary, c(2, 3), mean)
+temp <- data.frame(temp)
+temp$Y <- paste0("Y", 1:dim)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:dim))
+temp_long <- temp %>%
+  pivot_longer(cols = -Y, names_to = "X")
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+b <- ggplot(temp_long) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(#limits = rev(unique(temp_long$X)),
+    position = "left",
+    labels = 1:dim) +
+  scale_fill_viridis_c(option = "magma", name = "p(detect)",
+                       limits = c(0, 1)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) + #month.abb
+  labs(y = "Sampling Days Per Month",
+       x = "Number of Months Sampled",
+       title = "Probability of detecting Anopheles\nstephensi when starting sampling\nat peak vector density month") 
+
+temp <- apply(not_sampled_vector_annual_diff_summary, c(2, 3), mean)
+temp <- data.frame(temp)
+temp$Y <- paste0("Y", 1:dim)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:dim))
+temp_long <- temp %>%
+  pivot_longer(cols = -Y, names_to = "X")
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+max_val <- max(temp_long$value)
+c <- ggplot(temp_long) +
   geom_tile(aes(x = Y, y = X, fill = value)) +
   scale_y_discrete(limits = rev(unique(temp_long$X)),
-    position = "right",
-    labels = 1:10) +
-  scale_fill_viridis_c(option = "magma") +
-  scale_x_discrete(labels =  1:12) + #month.abb
+                   position = "left",
+                   labels = 1:dim) +
+  scale_fill_viridis_c(option = "viridis", name = "Increase in\np(detect)",
+                       limits = c(0, max_val)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) + #month.abb
   labs(y = "Sampling Days Per Month",
-       x = "Number of Months Sampled")
+       x = "Number of Months Sampled",
+       title = "Increase in probability of detecting Anopheles\nstephensi by starting sampling at vector peak\nrather than a random month") 
 
-# annual average
-temp2 <- data.frame(1 - apply(prob_not_sampled_poisson[6, 1:6, 1:6, 1:12], c(1, 2), mean)) # average for the year
-temp2$Y <- paste0("Y", 1:6)
-temp2$Y <- factor(temp2$Y, levels = paste0("Y", 1:6))
-temp_long2 <- temp2 %>%
+temp <- apply(not_sampled_rainfall_annual_diff_summary, c(2, 3), mean)
+temp <- data.frame(temp)
+temp$Y <- paste0("Y", 1:dim)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:dim))
+temp_long <- temp %>%
   pivot_longer(cols = -Y, names_to = "X")
-temp_long2$X  <- factor(temp_long2$X, levels = colnames(temp2)[-length(colnames(temp2))])
-ggplot(temp_long2) +
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+e <- ggplot(temp_long) +
   geom_tile(aes(x = Y, y = X, fill = value)) +
-  scale_y_discrete(limits = rev(unique(temp_long2$X)),
-    position = "right", 
-    labels = 6:1) +
-  scale_fill_viridis_c(option = "magma") +
-  scale_x_discrete(labels =  1:12) + #month.abb
+  scale_y_discrete(limits = rev(unique(temp_long$X)),
+                   position = "left",
+                   labels = 1:dim) +
+  scale_fill_viridis_c(option = "viridis", name = "Increase in\np(detect)",
+                       limits = c(0, max_val)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) + #month.abb
   labs(y = "Sampling Days Per Month",
-       x = "Number of Months Sampled")
+       x = "Number of Months Sampled",
+       title = "Increase in probability of detecting Anopheles\nstephensi by starting sampling at rainfall peak\nrather than a random month") 
 
-# rainfall peak
-temp3 <- data.frame(1 - prob_not_sampled_poisson[6, 1:6, 1:6, ts_peak_rainfall_month])
-temp3$Y <- paste0("Y", 1:6)
-temp3$Y <- factor(temp3$Y, levels = paste0("Y", 1:6))
-temp_long3 <- temp3 %>%
+temp <- apply(not_sampled_rainfall_annual_diff_summary, c(2, 3), mean)
+temp <- data.frame(temp)
+temp$Y <- paste0("Y", 1:dim)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:dim))
+temp_long <- temp %>%
   pivot_longer(cols = -Y, names_to = "X")
-temp_long3$X  <- factor(temp_long3$X, levels = colnames(temp3)[-length(colnames(temp3))])
-ggplot(temp_long3) +
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+e <- ggplot(temp_long) +
   geom_tile(aes(x = Y, y = X, fill = value)) +
-  scale_y_discrete(limits = rev(unique(temp_long3$X)),
-    position = "right",
-    labels = 6:1) +
-  scale_fill_viridis_c(option = "magma") +
-  scale_x_discrete(labels =  1:12) + #month.abb
+  scale_y_discrete(limits = rev(unique(temp_long$X)),
+                   position = "left",
+                   labels = 1:dim) +
+  scale_fill_viridis_c(option = "viridis", name = "Increase in\np(detect)",
+                       limits = c(0, max_val)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) + #month.abb
   labs(y = "Sampling Days Per Month",
-       x = "Number of Months Sampled")
+       x = "Number of Months Sampled",
+       title = "Increase in probability of detecting Anopheles\nstephensi by starting sampling at rainfall peak\nrather than a random month") 
 
-temp[, -7]/temp2[, -7]
-temp[, -7]/temp3[, -7]
+fold_change_vec_ann <- apply(not_sampled_vector_peak_absolute_summary/not_sampled_annual_avg_absolute_summary, c(2, 3), mean)
+temp <- data.frame(fold_change_vec_ann)
+temp$Y <- paste0("Y", 1:dim)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:dim))
+temp_long <- temp %>%
+  pivot_longer(cols = -Y, names_to = "X")
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+max_val2 <- max(temp_long$value)
+f <- ggplot(temp_long) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(limits = rev(unique(temp_long$X)),
+                   position = "left",
+                   labels = 1:dim) +
+  scale_fill_viridis_c(option = "mako", name = "Fold Change in\np(detect)",
+                       limits = c(1, max_val2)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) + #month.abb
+  labs(y = "Sampling Days Per Month",
+       x = "Number of Months Sampled",
+       title = "Fold change in probability of detecting Anopheles\nstephensi by starting sampling at vector peak\nrather than a random month") 
 
-temp2[, -7]/temp3[, -7]
+fold_change_rain_ann <- apply(not_sampled_rainfall_peak_absolute_summary/not_sampled_annual_avg_absolute_summary, c(2, 3), mean)
+temp <- data.frame(fold_change_rain_ann)
+temp$Y <- paste0("Y", 1:dim)
+temp$Y <- factor(temp$Y, levels = paste0("Y", 1:dim))
+temp_long <- temp %>%
+  pivot_longer(cols = -Y, names_to = "X")
+temp_long$X  <- factor(temp_long$X, levels = colnames(temp)[-length(colnames(temp))])
+g <- ggplot(temp_long) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(limits = rev(unique(temp_long$X)),
+                   position = "left",
+                   labels = 1:dim) +
+  scale_fill_viridis_c(option = "mako", name = "Fold Change in\np(detect)",
+                       limits = c(1, max_val2)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) + #month.abb
+  labs(y = "Sampling Days Per Month",
+       x = "Number of Months Sampled",
+       title = "Fold change in probability of detecting Anopheles\nstephensi by starting sampling at rainfall peak\nrather than a random month") 
 
-# Reordering rainfall time-series to start at max of vector density (note NOT max rainfall, which is what I calculate above)
-# reordered_rainfall <- matrix(nrow = length(retain_index), ncol = length(months_length))
-# end_rain_index <- dim(reordered_rainfall)[2]
-# for (i in 1:length(retain_index)) {
-#   reordered_rainfall[i, ] <- norm_rainfall_storage[i, c(start_index[i]:end_rain_index, 1:(start_index[i]-1))]
-# }
-
-# Reordering
-# reordered_mean_realisation <- matrix(nrow = 65, ncol = (12 * interpolating_points + 1))
-# start_index <- apply(mean_realisation, 1, function(x) which(x == max(x)))
-# start_index_month <- round(start_index/25 * 12)
-# end_index <- dim(reordered_mean_realisation)[2]
-# for (i in 1:65) {
-#   reordered_mean_realisation[i, ] <- mean_realisation[i, c(start_index[i]:end_index, 1:(start_index[i]-1))]
-# }
-
-# not_sampled_vector_annual_ratio_summary <- array(data = NA, dim = c(65, 6, 6))
-# not_sampled_vector_rainfall_ratio_summary <- array(data = NA, dim = c(65, 6, 6))
-# not_sampled_rainfall_peak_plus_ratio_summary <- array(data = NA, dim = c(65, 6, 6))
-# not_sampled_rainfall_annual_ratio_summary <- array(data = NA, dim = c(65, 6, 6))
-
-# not_sampled_vector_annual_ratio_summary[i, 1:6, 1:6] <- not_sampled_vector_peak_absolute_summary[i, 1:6, 1:6]/not_sampled_annual_avg_absolute_summary[i, 1:6, 1:6]
-# not_sampled_vector_rainfall_ratio_summary[i, 1:6, 1:6] <- not_sampled_vector_peak_absolute_summary[i, 1:6, 1:6]/not_sampled_rainfall_peak_absolute_summary[i, 1:6, 1:6]
-# not_sampled_rainfall_annual_ratio_summary[i, 1:6, 1:6] <- not_sampled_rainfall_peak_absolute_summary[i, 1:6, 1:6]/not_sampled_annual_avg_absolute_summary[i, 1:6, 1:6]
-
+legend <- get_legend(a + theme(legend.box.margin = margin(0, 0, 0, 2)))
+temp_plot <- plot_grid(a + theme(legend.position="none"), 
+                       d + theme(legend.position = "none"),
+                       b + theme(legend.position="none"), 
+                       nrow = 1) 
+temp_plot2 <- plot_grid(temp_plot, legend, rel_widths = c(3, 0.4))
+temp_plot3 <- plot_grid(NA,
+                        e + theme(legend.position="none"), 
+                        c + theme(legend.position="none"),
+                        ncol = 3)
+legend2 <- get_legend(c + theme(legend.box.margin = margin(0, 0, 0, 2)))
+temp_plot4 <- plot_grid(temp_plot3, legend2, rel_widths = c(3, 0.4))
+temp_plot5 <- plot_grid(NA,
+                        g + theme(legend.position="none"), 
+                        f + theme(legend.position="none"),
+                        ncol = 3)
+legend3 <- get_legend(f + theme(legend.box.margin = margin(0, 0, 0, 2)))
+temp_plot6 <- plot_grid(temp_plot5, legend3, rel_widths = c(3, 0.4))
+plot_grid(temp_plot2, temp_plot4, temp_plot6, nrow = 3) 
