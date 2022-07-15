@@ -354,3 +354,89 @@ temp_plot5 <- plot_grid(NA,
 legend3 <- get_legend(f + theme(legend.box.margin = margin(0, 0, 0, 2)))
 temp_plot6 <- plot_grid(temp_plot5, legend3, rel_widths = c(3, 0.4))
 plot_grid(temp_plot2, temp_plot4, temp_plot6, nrow = 3) 
+
+# Single day per month sampling, seeing the effect of 
+# 1st dim is the time series
+# 2nd dim is the number of months sampled
+# 3rd dim is the number of nights per month sampled
+# 4th dim is which month you start at 
+
+# rearrange so that time-series peaks are all aligned
+prob_not_sampled_poisson_rearranged <- array(data = NA, dim = c(65, 12, 10, 12))
+for (i in 1:65) {
+  index <- peak_density_month[i]
+  if (index == 1) {
+    prob_not_sampled_poisson_rearranged[i, , , ] <- prob_not_sampled_poisson[i, , , ]
+  } else {
+    prob_not_sampled_poisson_rearranged[i, , , ] <- prob_not_sampled_poisson[i, , , c(index:12, 1:(index - 1))]
+  }
+}
+
+x <- 1 - prob_not_sampled_poisson_rearranged[, 3, 1, ] # 3 months sampled, 1 night per month
+x <- data.frame(id = 1:65, cluster = overall$cluster, x) %>%
+  pivot_longer(-c(id, cluster), names_to = "month_start", values_to = "prob_detect")
+x$month_start <- factor(x$month_start, levels = paste0("X", 1:12))
+x$id <- factor(x$id)
+x$cluster <- factor(x$cluster)
+y <- x %>%
+  group_by(cluster, month_start) %>%
+  summarise(mean = mean(prob_detect))
+
+vec <- ggplot(x, aes(x = month_start, y = prob_detect, group = id, col = cluster)) +
+  geom_line(alpha = 0.2) +
+  geom_line(data = y, aes(x = month_start, y = mean, group = cluster), size = 1.5) +
+  scale_x_discrete(labels =  0:11) +
+  scale_colour_manual(values = c("#DF536B", "black")) +
+  labs(x = "Month Sampling Started Relative to Peak Vector Month", y = "Probability of Detection",
+       title = "Sampling Based on Vector Timing")
+
+prob_not_sampled_poisson_rearranged_rainfall <- array(data = NA, dim = c(65, 12, 10, 12))
+for (i in 1:65) {
+  index <- peak_rainfall_month[i]
+  if (index == 1) {
+    prob_not_sampled_poisson_rearranged_rainfall[i, , , ] <- prob_not_sampled_poisson[i, , , ]
+  } else {
+    prob_not_sampled_poisson_rearranged_rainfall[i, , , ] <- prob_not_sampled_poisson[i, , , c(index:12, 1:(index - 1))]
+  }
+}
+
+x <- 1 - prob_not_sampled_poisson_rearranged_rainfall[, 3, 1, ] # 3 months sampled, 1 night per month
+x <- data.frame(id = 1:65, cluster = overall$cluster, x) %>%
+  pivot_longer(-c(id, cluster), names_to = "month_start", values_to = "prob_detect")
+x$month_start <- factor(x$month_start, levels = paste0("X", 1:12))
+x$id <- factor(x$id)
+x$cluster <- factor(x$cluster)
+y <- x %>%
+  group_by(cluster, month_start) %>%
+  summarise(mean = mean(prob_detect))
+
+rain <- ggplot(x, aes(x = month_start, y = prob_detect, group = id, col = cluster)) +
+  geom_line(alpha = 0.2) +
+  geom_line(data = y, aes(x = month_start, y = mean, group = cluster), size = 1.5) +
+  scale_x_discrete(labels =  0:11) +
+  scale_colour_manual(values = c("#DF536B", "black")) +
+  labs(x = "Month Sampling Started Relative to Peak Rainfall Month", y = "Probability of Detection",
+       title = "Sampling Based on Rainfall Timing")
+
+
+plot_grid(rain, vec, nrow = 1)
+
+
+
+# x <- 1 - prob_not_sampled_poisson[, 2, 1, ] # 3 months sampled, 1 night per month
+# x <- data.frame(id = 1:65, cluster = overall$cluster, x) %>%
+#   pivot_longer(-c(id, cluster), names_to = "month_start", values_to = "prob_detect")
+# x$month_start <- factor(x$month_start, levels = paste0("X", 1:12))
+# x$id <- factor(x$id)
+# x$cluster <- factor(x$cluster)
+# y <- x %>%
+#   group_by(cluster, month_start) %>%
+#   summarise(mean = mean(prob_detect))
+# 
+# ggplot(x, aes(x = month_start, y = prob_detect, group = id, col = cluster)) +
+#   geom_line(alpha = 0.2) +
+#   geom_line(data = y, aes(x = month_start, y = mean, group = cluster)) +
+#   scale_x_discrete(labels =  month.abb) +
+#   labs(x = "Month Sampling Started", y = "Probability of Detection")
+
+
