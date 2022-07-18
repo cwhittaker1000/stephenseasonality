@@ -212,302 +212,142 @@ overall_df <- raw_overall_df %>%
   left_join(seas_df, by = "seasonal_profile")
 overall_df$timing_type <- factor(overall_df$timing_type, levels = c("annual_average", "rainfall", "maximum"))
 
-# Plotting Overall Impact, Annual Average vs Optimal Timing - Bendiocarb
-set.seed(10)
-data <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "rainfall", ]
-a <- ggplot() +
-  geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
-               fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
-  new_scale_color() +
-  geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
-             size = 2, position = position_dodge(0.3)) +
-  geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
-            position = position_dodge(0.3), alpha = 0.7) +
-  scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  scale_x_discrete(labels = c("Random\nMonth", "Optimal\nTiming")) +
+# Plotting Maximum (Optimal Timing) Overall Reduction vs Seasonality and IRS Profiles
+time_since_IRS <- 1:365
+actellic_output <- 1 / (1 + exp(-(actellic$irs_decay_mort1 + actellic$irs_decay_mort2 * time_since_IRS)))
+bendiocarb_output <- 1 / (1 + exp(-(bendiocarb$irs_decay_mort1 + bendiocarb$irs_decay_mort2 * time_since_IRS)))
+
+irs_killing <- data.frame(time_since_IRS = time_since_IRS, 
+                          Pirimiphos_Methyl = actellic_output,
+                          Bendiocarb = bendiocarb_output) %>%
+  pivot_longer(-time_since_IRS, names_to = "insecticide", values_to = "mortality_effect")
+insecticide_names <- c(`Pirimiphos_Methyl` = "Pirimiphos Methyl",
+                       `Bendiocarb` = "Bendiocarb")
+irs_killing_plot <- ggplot(irs_killing, aes(x = time_since_IRS, y = mortality_effect, colour = insecticide)) +
+  geom_path(size = 2) +
   theme_bw() +
-  labs(x = "", y = "% Reduction in Incidence") +
-  theme(legend.position = "none",
-        plot.margin = unit(c(0,0,0,0), "cm")) +
-  lims(y = c(18.7, 37.3))
-
-data2 <- data %>%
-  dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
-  pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
-  mutate(diff = maximum - annual_average,
-         diff_prop = diff/annual_average,
-         inc_prop_red = maximum,
-         start = 0)
-b <- ggplot() +
-  geom_bar(data = data2, aes(x = inc_prop_red * 100, y = diff_prop * 100, fill = seasonality,
-                             group = seasonal_profile), alpha = 0.5, stat = "identity", width = 0.4, col = "black", size = 0.2) +
-  scale_fill_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  coord_flip() +
-  theme_bw() +
-  labs(y = "% Increased Impact") +
-  theme(legend.position = "right",
-        axis.line = element_blank(),
-        axis.line.x = element_line(size = 0.25),
-        axis.line.y = element_line(size = 0.25),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.title.x = element_text(size = 8, vjust = +7),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor = element_blank(),
-        #panel.border = element_blank(),
-        panel.background = element_blank(),
-        plot.margin = unit(c(1,1,1,-0.1), "cm")) +
-  scale_x_continuous(position = "bottom", limits = c(18.7, 37.3),
-                     breaks = c(20, 25, 30, 35))
-c <- plot_grid(a, b, nrow = 1, rel_widths = c(0.8, 0.6), align = "h") # 5.8 * 5.2 looks nice
-
-# Plotting Overall Impact, Annual Average vs Optimal Timing - Bendiocarb
-set.seed(10)
-data <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "annual_average", ]
-d <- ggplot() +
-  geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
-               fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
-  new_scale_color() +
-  geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
-             size = 2, position = position_dodge(0.3)) +
-  geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
-            position = position_dodge(0.3), alpha = 0.7) +
-  scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  scale_x_discrete(labels = c("Rainfall\nTiming", "Optimal\nTiming")) +
-  theme_bw() +
-  labs(x = "", y = "% Reduction in Incidence") +
-  theme(legend.position = "none",
-        plot.margin = unit(c(0,0,0,0), "cm")) +
-  lims(y = c(9, 37.3))
-
-data2 <- data %>%
-  dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
-  pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
-  mutate(diff = maximum - rainfall,
-         diff_prop = diff/rainfall,
-         inc_prop_red = maximum,
-         start = 0)
-e <- ggplot() +
-  geom_bar(data = data2, aes(x = inc_prop_red * 100, y = diff_prop * 100, fill = seasonality,
-                             group = seasonal_profile), alpha = 0.5, stat = "identity", width = 0.4, col = "black", size = 0.2) +
-  scale_fill_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  coord_flip() +
-  theme_bw() +
-  labs(y = "% Increased Impact") +
-  theme(legend.position = "right",
-        axis.line = element_blank(),
-        axis.line.x = element_line(size = 0.25),
-        axis.line.y = element_line(size = 0.25),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.title.x = element_text(size = 8, vjust = +7),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor = element_blank(),
-        #panel.border = element_blank(),
-        panel.background = element_blank(),
-        plot.margin = unit(c(1,1,1,-0.1), "cm")) +
-  scale_x_continuous(position = "bottom", limits = c(9, 37.3),
-                     breaks = c(20, 25, 30, 35))
-f <- plot_grid(d, e, nrow = 1, rel_widths = c(0.8, 0.6), align = "h") # 5.8 * 5.2 looks nice
-
-g <- plot_grid(c, f, nrow = 1)
-
-# Plotting Overall Impact, Annual Average vs Optimal Timing - Pirimithos
-set.seed(10)
-data <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type != "rainfall", ]
-h <- ggplot() +
-  geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
-               fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
-  new_scale_color() +
-  geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
-             size = 2, position = position_dodge(0.3)) +
-  geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
-            position = position_dodge(0.3), alpha = 0.7) +
-  scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  scale_x_discrete(labels = c("Random\nMonth", "Optimal\nTiming")) +
-  theme_bw() +
-  labs(x = "", y = "% Reduction in Incidence") +
-  theme(legend.position = "none",
-        plot.margin = unit(c(0,0,0,0), "cm")) +
-  lims(y = c(40.5, 50.2))
-
-data2 <- data %>%
-  dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
-  pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
-  mutate(diff = maximum - annual_average,
-         diff_prop = diff/annual_average,
-         inc_prop_red = maximum,
-         start = 0)
-i <- ggplot() +
-  geom_bar(data = data2, aes(x = inc_prop_red * 100, y = diff_prop * 100, fill = seasonality,
-                             group = seasonal_profile), alpha = 0.5, stat = "identity", width = 0.4, col = "black", size = 0.2) +
-  scale_fill_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  coord_flip() +
-  theme_bw() +
-  labs(y = "% Increased Impact") +
-  theme(legend.position = "right",
-        axis.line = element_blank(),
-        axis.line.x = element_line(size = 0.25),
-        axis.line.y = element_line(size = 0.25),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.title.x = element_text(size = 8, vjust = +7),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor = element_blank(),
-        #panel.border = element_blank(),
-        panel.background = element_blank(),
-        plot.margin = unit(c(1,1,1,-0.1), "cm")) +
-  scale_x_continuous(position = "bottom", limits = c(40.5, 50.2),
-                     breaks = c(20, 25, 30, 35))
-j <- plot_grid(h, i, nrow = 1, rel_widths = c(0.8, 0.6), align = "h") # 5.8 * 5.2 looks nice
-
-# Plotting Overall Impact, Annual Average vs Optimal Timing - Pirimithos
-set.seed(10)
-data <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type != "annual_average", ]
-k <- ggplot() +
-  geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
-               fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
-  new_scale_color() +
-  geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
-             size = 2, position = position_dodge(0.3)) +
-  geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
-            position = position_dodge(0.3), alpha = 0.7) +
-  scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  scale_x_discrete(labels = c("Rainfall\nTiming", "Optimal\nTiming")) +
-  theme_bw() +
-  labs(x = "", y = "% Reduction in Incidence") +
-  theme(legend.position = "none",
-        plot.margin = unit(c(0,0,0,0), "cm")) +
-  lims(y = c(32.5, 50.2))
-
-data2 <- data %>%
-  dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
-  pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
-  mutate(diff = maximum - rainfall,
-         diff_prop = diff/rainfall,
-         inc_prop_red = maximum,
-         start = 0)
-l <- ggplot() +
-  geom_bar(data = data2, aes(x = inc_prop_red * 100, y = diff_prop * 100, fill = seasonality,
-                             group = seasonal_profile), alpha = 0.5, stat = "identity", width = 0.4, col = "black", size = 0.2) +
-  scale_fill_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  coord_flip() +
-  theme_bw() +
-  labs(y = "% Increased Impact") +
-  theme(legend.position = "right",
-        axis.line = element_blank(),
-        axis.line.x = element_line(size = 0.25),
-        axis.line.y = element_line(size = 0.25),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.title.x = element_text(size = 8, vjust = +7),
-        panel.grid.major.y = element_blank(),
-        panel.grid.minor = element_blank(),
-        #panel.border = element_blank(),
-        panel.background = element_blank(),
-        plot.margin = unit(c(1,1,1,-0.1), "cm")) +
-  scale_x_continuous(position = "bottom", limits = c(32.5, 50.2),
-                     breaks = c(20, 25, 30, 35))
-m <- plot_grid(k, l, nrow = 1, rel_widths = c(0.8, 0.6), align = "h") # 5.8 * 5.2 looks nice
-
-n <- plot_grid(j, m, nrow = 1)
-
-o <- plot_grid(g, n, nrow = 2)
-
-#####
-
-set.seed(10)
-IRS_max_red_boxplot <- ggplot(overall_df, aes(x = insecticide, y = 100 * inc_prop_red, col = insecticide)) +
-  geom_boxplot(fill = NA, outlier.shape = NA) + 
-  scale_colour_manual(values = c("#FA9F42", "#0B6E4F", "#B2B2B3"),
+  scale_colour_manual(values = c("#ae337a", "#209e88"),
                       labels = c("Bendiocarb", "Pirimiphos Methyl")) +
-  geom_jitter(aes(x = insecticide, y = 100 * inc_prop_red), size = 1, width = 0.25) +
-  scale_x_discrete(labels = c("Bendiocarb", "Pirimiphos Methyl")) +
-  facet_grid(~timing_type) +
+  scale_y_continuous(limits = c(0, 1)) +
+  facet_wrap(~insecticide,
+             labeller = as_labeller(insecticide_names)) +
+  labs(x = "Time Since IRS Spraying (Days)", y = "Probability of Mosquitoes Dying") +
   theme_bw() +
-  labs(y = "% Reduction In Incidence") +
-  theme(legend.position = "none", axis.title.x = element_blank(),
-        strip.background = element_blank(), strip.placement = "outside")
+  theme(legend.justification = c(1, 0), #
+        strip.background = element_rect(fill = "white"),
+        axis.title.y = element_text(size = 8),
+        legend.position = "none") + #c(0.97, 0.65)) +
+  guides(col = guide_legend(ncol = 1, title = "Insecticide"))
 
+data_overall_bend <- overall_df[overall_df$timing_type == "maximum" & overall_df$insecticide == "ben", ]
+data_overall_pirim <- overall_df[overall_df$timing_type == "maximum" & overall_df$insecticide == "pirim", ]
+data_overall_bend_rand <- overall_df[overall_df$timing_type == "annual_average" & overall_df$insecticide == "ben", ]
+data_overall_pirim_rand <- overall_df[overall_df$timing_type == "annual_average" & overall_df$insecticide == "pirim", ]
 
+irs_overall_reduction <- ggplot() +
+  geom_point(data = data_overall_bend, aes(x = seasonality, y = 100 * inc_prop_red, col = seasonality)) +
+  geom_segment(aes(x = data_overall_bend$seasonality,
+                   xend = data_overall_bend$seasonality,
+                   y = 100 * data_overall_bend_rand$inc_prop_red,
+                   yend = 100 * data_overall_bend$inc_prop_red - 0.5, 
+                   col = data_overall_bend$seasonality),
+               arrow=arrow(type="closed", length = unit(0.02, "npc"))) +
+  geom_point(data = data_overall_bend_rand, aes(x = seasonality, y = 100 * inc_prop_red), col = "grey") +
+  theme_bw() +
+  scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
+  new_scale_color() +
+  geom_point(data = data_overall_pirim, aes(x = seasonality, y = 100 * inc_prop_red, col = seasonality)) +
+  geom_segment(aes(x = data_overall_pirim$seasonality,
+                   xend = data_overall_pirim$seasonality,
+                   y = 100 * data_overall_pirim_rand$inc_prop_red,
+                   yend = 100 * data_overall_pirim$inc_prop_red - 0.5, 
+                   col = data_overall_pirim$seasonality),
+               arrow=arrow(type="closed", length = unit(0.02, "npc"))) +
+  geom_point(data = data_overall_pirim_rand, aes(x = seasonality, y = 100 * inc_prop_red), col = "grey") +
+  theme_bw() +
+  scale_colour_viridis(option = "viridis", limits = c(0.25, 1), name = "Seasonality") +
+  theme(legend.position = "none") +
+  labs(x = "% of Annual Incidence in 3 Months", y = "% Reduction in Incidence")
 
+irs_overall <- plot_grid(irs_killing_plot, irs_overall_reduction, nrow = 2, rel_heights = c(0.3, 1))
 
-ggplot() +
-  geom_boxplot(data = data2, aes(y = 100 * diff_prop), fill = NA, alpha = 0.5, col = "grey") +
-  geom_point(data = data2, aes(x = 0, y = 100 * diff_prop, col = seasonality, group = seasonal_profile),
-             size = 2, position = position_dodge(0.3)) +
-  scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") 
+# Plotting Bendiocarb Comparative Impact Depending On Timing
+ben_data <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "maximum", ] %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = ifelse(timing_type == "maximum", 2, 1)) 
+ben_data$timing_type_new <- ifelse(ben_data$timing_type == "rainfall", "rainfall_comp", "average_comp")
+ben_data2 <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type == "maximum", ]  %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = ifelse(timing_type == "maximum", 2, 1)) 
+ben_data2$timing_type_new <- "rainfall_comp"
+ben_data3 <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type == "maximum", ]  %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = ifelse(timing_type == "maximum", 2, 1)) 
+ben_data3$timing_type_new <- "average_comp"
+ben_data_overall <- rbind(ben_data, ben_data2, ben_data3)
 
-
-
-
-ggplot() +
-  geom_boxplot(data = data2, aes(y = 100 * diff_prop), fill = NA, alpha = 0.5, col = "grey") +
-  geom_point(data = data2, aes(x = 0, y = 100 * diff_prop, col = seasonality, group = seasonal_profile),
-             size = 2, position = position_dodge(0.3)) +
-  scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") 
-
-
-
-data <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "annual_average", ]
-ggplot() +
-  geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
+set.seed(10)
+ben_impact <- ggplot() +
+  geom_boxplot(data = ben_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = new_timing),
                fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
   new_scale_color() +
-  geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+  geom_point(data = ben_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
              size = 2, position = position_dodge(0.3)) +
-  geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
-            position = position_dodge(0.3), alpha = 0.7) +
+  facet_wrap(~timing_type_new) +
+  geom_line(data = ben_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = seasonal_profile, 
+                             col = seasonality), position = position_dodge(0.3), alpha = 0.7) +
   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
-  scale_x_discrete(labels = c("Rainfall\nTiming", "Optimal\nTiming")) +
-  #facet_wrap(~insecticide, scales = "free_y") +
   theme_bw() +
-  labs(x = "", y = "% Reduction in Incidence")
+  labs(x = "", y = "% Reduction in Incidence") +
+  theme(legend.position = "right", #plot.margin = unit(c(1,1,1,1), "cm"),
+        strip.background = element_blank(), strip.text = element_blank()) +
+  lims(y = c(9, 37.3)) +
+  scale_x_continuous(breaks = c(1, 2), labels = c("Random\nMonth", "_____\nTiming")) +
+  scale_y_continuous(limits = c(9, 37.3), position = "right")
 
+# Plotting Pirimithos Methyl Comparative Impact Depending On Timing
+pirim_data <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type != "maximum", ] %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = ifelse(timing_type == "maximum", 2, 1)) 
+pirim_data$timing_type_new <- ifelse(pirim_data$timing_type == "rainfall", "rainfall_comp", "average_comp")
+pirim_data2 <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type == "maximum", ]  %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = ifelse(timing_type == "maximum", 2, 1)) 
+pirim_data2$timing_type_new <- "rainfall_comp"
+pirim_data3 <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type == "maximum", ]  %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = ifelse(timing_type == "maximum", 2, 1)) 
+pirim_data3$timing_type_new <- "average_comp"
+pirim_data_overall <- rbind(pirim_data, pirim_data2, pirim_data3)
 
-ggplot() +
-  geom_boxplot(data = data2, aes(y = 100 * diff, col = seasonality), fill = NA, outlier.shape = NA) +
-  geom_point(data = data2, aes(x = 0, y = 100 * diff, col = seasonality)) 
-plot(data2$seasonality, data2$diff)
+set.seed(10)
+pirim_impact <- ggplot() +
+  geom_boxplot(data = pirim_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = new_timing),
+               fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
+  new_scale_color() +
+  geom_point(data = pirim_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+             size = 2, position = position_dodge(0.3)) +
+  facet_wrap(~timing_type_new) +
+  geom_line(data = pirim_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = seasonal_profile, 
+                                         col = seasonality), position = position_dodge(0.3), alpha = 0.7) +
+  scale_colour_viridis(option = "viridis", limits = c(0.25, 1), name = "Seasonality") +
+  theme_bw() +
+  labs(x = "", y = "% Reduction in Incidence") +
+  theme(legend.position = "right", #plot.margin = unit(c(1,1,1,1), "cm"),
+        strip.background = element_blank(), strip.text = element_blank()) +
+  scale_x_continuous(breaks = c(1, 2), labels = c("Random\nMonth", "_____\nTiming")) +
+  scale_y_continuous(limits = c(32.5, 50), position = "right")
 
+second_irs_figure <- plot_grid(pirim_impact, ben_impact, nrow = 2)
+final_irs_figure <- plot_grid(irs_overall, second_irs_figure, ncol = 2, rel_widths = c(1, 1))
+final_irs_figure
 
-data <- overall_df[overall_df$insecticide == "clothi" &
-                     overall_df$timing_type != "annual_average", ]
-data2 <- data %>%
-  dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
-  pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
-  mutate(diff = maximum - rainfall)
-
-ggplot() +
-  geom_boxplot(data = data2, aes(y = 100 * diff, col = seasonality), fill = NA, outlier.shape = NA) +
-  geom_point(data = data2, aes(x = 0, y = 100 * diff, col = seasonality)) 
-plot(data2$seasonality, data2$diff)
-
-summary(lm(data2$diff ~ 0 + data2$seasonality))
-
-ggplot(overall_df[overall_df$insecticide == "clothi" & overall_df$timing_type != "annual_average", ]) +
-  geom_line(aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
-            alpha = 0.2, position = position_dodge(0.1)) +
-  geom_boxplot(aes(x = timing_type, y = 100 * inc_prop_red, fill = timing_type, col = timing_type),
-               fill = NA, outlier.shape = NA) + 
-  geom_point(aes(x = timing_type, y = 100 * inc_prop_red, col = timing_type, group = seasonal_profile), 
-             size = 1, position = position_dodge(0.1)) 
-
-ggplot(overall_df[overall_df$insecticide == "clothi" & overall_df$timing_type != "annual_average", ]) +
-  geom_line(aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
-            alpha = 0.2, position = position_dodge(0.1)) +
-  geom_point(aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, fill = timing_type), 
-             size = 1, position = position_dodge(0.1)) +
-  geom_boxplot(aes(x = timing_type, y = 100 * inc_prop_red, fill = timing_type),
-               fill = NA, outlier.shape = NA) 
-
-
-
-# ggplot() +
+# final_irs_figure <- plot_grid(irs_overall_reduction, second_irs_figure, ncol = 2, rel_widths = c(1, 1))
+# final_irs_figure
+# # Plotting Overall Impact, Annual Average vs Optimal Timing - Bendiocarb
+# set.seed(10)
+# data <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "rainfall", ]
+# a <- ggplot() +
 #   geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
 #                fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
 #   new_scale_color() +
@@ -517,47 +357,375 @@ ggplot(overall_df[overall_df$insecticide == "clothi" & overall_df$timing_type !=
 #             position = position_dodge(0.3), alpha = 0.7) +
 #   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
 #   scale_x_discrete(labels = c("Random\nMonth", "Optimal\nTiming")) +
-#   #facet_wrap(~insecticide, scales = "free_y") +
 #   theme_bw() +
-#   labs(x = "", y = "% Reduction in Incidence")
-# data <- overall_df[overall_df$insecticide == "ben", ]
-# data$timing_type <- factor(data$timing_type, levels = c("annual_average", "maximum", "rainfall"))
-# ggplot() +
-#   geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
-#                fill = NA, outlier.shape = NA, alpha = 0.25, col = "grey") + 
-#   new_scale_color() +
+#   labs(x = "", y = "% Reduction in Incidence") +
+#   theme(legend.position = "none",
+#         plot.margin = unit(c(0,0,0,0), "cm")) +
+#   lims(y = c(9, 37.3))
+# 
+# # data_new <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "rainfall", ]
+# # ggplot() +
+# #   geom_line(data = data_new, aes(x = seasonality, y = 100 * inc_prop_red, 
+# #                                  group = seasonal_profile),
+# #             alpha = 0.7)  +
+# #   new_scale_color() +
+# #   geom_point(data = data_new, aes(x = seasonality, y = 100 * inc_prop_red, col = timing_type))
+# #   
+# # data_new <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "annual_average", ]
+# # ggplot() +
+# #   geom_line(data = data_new, aes(x = seasonality, y = 100 * inc_prop_red, 
+# #                                  group = seasonal_profile),
+# #             alpha = 0.7)  +
+# #   new_scale_color() +
+# #   geom_point(data = data_new, aes(x = seasonality, y = 100 * inc_prop_red, col = timing_type))
+# 
+# 
+#   
+# new_scale_color() +
 #   geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
 #              size = 2, position = position_dodge(0.3)) +
 #   geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
 #             position = position_dodge(0.3), alpha = 0.7) +
 #   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
 #   scale_x_discrete(labels = c("Random\nMonth", "Optimal\nTiming")) +
+#   theme_bw() +
+#   labs(x = "", y = "% Reduction in Incidence") +
+#   theme(legend.position = "none",
+#         plot.margin = unit(c(0,0,0,0), "cm")) +
+#   lims(y = c(9, 37.3))
+# 
+# 
+# data2 <- data %>%
+#   dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
+#   pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
+#   mutate(diff = maximum - annual_average,
+#          diff_prop = diff/annual_average,
+#          inc_prop_red = maximum,
+#          start = 0)
+# b <- ggplot() +
+#   geom_bar(data = data2, aes(x = inc_prop_red * 100, y = diff_prop * 100, fill = seasonality,
+#                              group = seasonal_profile), alpha = 0.5, stat = "identity", width = 0.4, col = "black", size = 0.2) +
+#   scale_fill_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
+#   coord_flip() +
+#   theme_bw() +
+#   labs(y = "% Increased Impact") +
+#   theme(legend.position = "right",
+#         axis.line = element_blank(),
+#         axis.line.x = element_line(size = 0.25),
+#         axis.line.y = element_line(size = 0.25),
+#         axis.text.y = element_blank(),
+#         axis.ticks.y = element_blank(),
+#         axis.title.y = element_blank(),
+#         axis.title.x = element_text(size = 8, vjust = +7),
+#         panel.grid.major.y = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         #panel.border = element_blank(),
+#         panel.background = element_blank(),
+#         plot.margin = unit(c(1,1,1,-0.1), "cm")) +
+#   scale_x_continuous(position = "bottom", limits = c(9, 37.3),
+#                      breaks = c(20, 25, 30, 35))
+# c <- plot_grid(a, b, nrow = 1, rel_widths = c(0.8, 0.6), align = "h") # 5.8 * 5.2 looks nice
+# 
+# # Plotting Overall Impact, Annual Average vs Optimal Timing - Bendiocarb
+# set.seed(10)
+# data <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "annual_average", ]
+# d <- ggplot() +
+#   geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
+#                fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
+#   new_scale_color() +
+#   geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+#              size = 2, position = position_dodge(0.3)) +
+#   geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
+#             position = position_dodge(0.3), alpha = 0.7) +
+#   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
+#   scale_x_discrete(labels = c("Rainfall\nTiming", "Optimal\nTiming")) +
+#   theme_bw() +
+#   labs(x = "", y = "% Reduction in Incidence") +
+#   theme(legend.position = "none",
+#         plot.margin = unit(c(0,0,0,0), "cm")) +
+#   lims(y = c(9, 37.3))
+# 
+# data2 <- data %>%
+#   dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
+#   pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
+#   mutate(diff = maximum - rainfall,
+#          diff_prop = diff/rainfall,
+#          inc_prop_red = maximum,
+#          start = 0)
+# e <- ggplot() +
+#   geom_bar(data = data2, aes(x = inc_prop_red * 100, y = diff_prop * 100, fill = seasonality,
+#                              group = seasonal_profile), alpha = 0.5, stat = "identity", width = 0.4, col = "black", size = 0.2) +
+#   scale_fill_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
+#   coord_flip() +
+#   theme_bw() +
+#   labs(y = "% Increased Impact") +
+#   theme(legend.position = "right",
+#         axis.line = element_blank(),
+#         axis.line.x = element_line(size = 0.25),
+#         axis.line.y = element_line(size = 0.25),
+#         axis.text.y = element_blank(),
+#         axis.ticks.y = element_blank(),
+#         axis.title.y = element_blank(),
+#         axis.title.x = element_text(size = 8, vjust = +7),
+#         panel.grid.major.y = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         #panel.border = element_blank(),
+#         panel.background = element_blank(),
+#         plot.margin = unit(c(1,1,1,-0.1), "cm")) +
+#   scale_x_continuous(position = "bottom", limits = c(9, 37.3),
+#                      breaks = c(20, 25, 30, 35))
+# f <- plot_grid(d, e, nrow = 1, rel_widths = c(0.8, 0.6), align = "h") # 5.8 * 5.2 looks nice
+# 
+# g <- plot_grid(c, f, nrow = 1)
+# 
+# # Plotting Overall Impact, Annual Average vs Optimal Timing - Pirimithos
+# set.seed(10)
+# data <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type != "rainfall", ]
+# h <- ggplot() +
+#   geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
+#                fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
+#   new_scale_color() +
+#   geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+#              size = 2, position = position_dodge(0.3)) +
+#   geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
+#             position = position_dodge(0.3), alpha = 0.7) +
+#   scale_colour_viridis(option = "viridis", limits = c(0.25, 1), name = "Seasonality") +
+#   scale_x_discrete(labels = c("Random\nMonth", "Optimal\nTiming")) +
+#   theme_bw() +
+#   labs(x = "", y = "% Reduction in Incidence") +
+#   theme(legend.position = "none",
+#         plot.margin = unit(c(0,0,0,0), "cm")) +
+#   lims(y = c(40.5, 50.2))
+# 
+# data2 <- data %>%
+#   dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
+#   pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
+#   mutate(diff = maximum - annual_average,
+#          diff_prop = diff/annual_average,
+#          inc_prop_red = maximum,
+#          start = 0)
+# i <- ggplot() +
+#   geom_bar(data = data2, aes(x = inc_prop_red * 100, y = diff_prop * 100, fill = seasonality,
+#                              group = seasonal_profile), alpha = 0.5, stat = "identity", width = 0.4, col = "black", size = 0.2) +
+#   scale_fill_viridis(option = "viridis", limits = c(0.25, 1), name = "Seasonality") +
+#   coord_flip() +
+#   theme_bw() +
+#   labs(y = "% Increased Impact") +
+#   theme(legend.position = "right",
+#         axis.line = element_blank(),
+#         axis.line.x = element_line(size = 0.25),
+#         axis.line.y = element_line(size = 0.25),
+#         axis.text.y = element_blank(),
+#         axis.ticks.y = element_blank(),
+#         axis.title.y = element_blank(),
+#         axis.title.x = element_text(size = 8, vjust = +7),
+#         panel.grid.major.y = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         #panel.border = element_blank(),
+#         panel.background = element_blank(),
+#         plot.margin = unit(c(1,1,1,-0.1), "cm")) +
+#   scale_x_continuous(position = "bottom", limits = c(40.5, 50.2),
+#                      breaks = c(20, 25, 30, 35))
+# j <- plot_grid(h, i, nrow = 1, rel_widths = c(0.8, 0.6), align = "h") # 5.8 * 5.2 looks nice
+# 
+# # Plotting Overall Impact, Annual Average vs Optimal Timing - Pirimithos
+# set.seed(10)
+# data <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type != "annual_average", ]
+# k <- ggplot() +
+#   geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
+#                fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
+#   new_scale_color() +
+#   geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+#              size = 2, position = position_dodge(0.3)) +
+#   geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
+#             position = position_dodge(0.3), alpha = 0.7) +
+#   scale_colour_viridis(option = "viridis", limits = c(0.25, 1), name = "Seasonality") +
+#   scale_x_discrete(labels = c("Rainfall\nTiming", "Optimal\nTiming")) +
+#   theme_bw() +
+#   labs(x = "", y = "% Reduction in Incidence") +
+#   theme(legend.position = "none",
+#         plot.margin = unit(c(0,0,0,0), "cm")) +
+#   lims(y = c(32.5, 50.2))
+# 
+# data2 <- data %>%
+#   dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
+#   pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
+#   mutate(diff = maximum - rainfall,
+#          diff_prop = diff/rainfall,
+#          inc_prop_red = maximum,
+#          start = 0)
+# l <- ggplot() +
+#   geom_bar(data = data2, aes(x = inc_prop_red * 100, y = diff_prop * 100, fill = seasonality,
+#                              group = seasonal_profile), alpha = 0.5, stat = "identity", width = 0.4, col = "black", size = 0.2) +
+#   scale_fill_viridis(option = "viridis", limits = c(0.25, 1), name = "Seasonality") +
+#   coord_flip() +
+#   theme_bw() +
+#   labs(y = "% Increased Impact") +
+#   theme(legend.position = "right",
+#         axis.line = element_blank(),
+#         axis.line.x = element_line(size = 0.25),
+#         axis.line.y = element_line(size = 0.25),
+#         axis.text.y = element_blank(),
+#         axis.ticks.y = element_blank(),
+#         axis.title.y = element_blank(),
+#         axis.title.x = element_text(size = 8, vjust = +7),
+#         panel.grid.major.y = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         #panel.border = element_blank(),
+#         panel.background = element_blank(),
+#         plot.margin = unit(c(1,1,1,-0.1), "cm")) +
+#   scale_x_continuous(position = "bottom", limits = c(32.5, 50.2),
+#                      breaks = c(20, 25, 30, 35))
+# m <- plot_grid(k, l, nrow = 1, rel_widths = c(0.8, 0.6), align = "h") # 5.8 * 5.2 looks nice
+# 
+# n <- plot_grid(j, m, nrow = 1)
+# 
+# o <- plot_grid(g, n, nrow = 2)
+# 
+# 
+#   
+# 
+# 
+# #####
+# 
+# set.seed(10)
+# IRS_max_red_boxplot <- ggplot(overall_df, aes(x = insecticide, y = 100 * inc_prop_red, col = insecticide)) +
+#   geom_boxplot(fill = NA, outlier.shape = NA) + 
+#   scale_colour_manual(values = c("#FA9F42", "#0B6E4F", "#B2B2B3"),
+#                       labels = c("Bendiocarb", "Pirimiphos Methyl")) +
+#   geom_jitter(aes(x = insecticide, y = 100 * inc_prop_red), size = 1, width = 0.25) +
+#   scale_x_discrete(labels = c("Bendiocarb", "Pirimiphos Methyl")) +
+#   facet_grid(~timing_type) +
+#   theme_bw() +
+#   labs(y = "% Reduction In Incidence") +
+#   theme(legend.position = "none", axis.title.x = element_blank(),
+#         strip.background = element_blank(), strip.placement = "outside")
+# 
+# 
+# 
+# 
+# ggplot() +
+#   geom_boxplot(data = data2, aes(y = 100 * diff_prop), fill = NA, alpha = 0.5, col = "grey") +
+#   geom_point(data = data2, aes(x = 0, y = 100 * diff_prop, col = seasonality, group = seasonal_profile),
+#              size = 2, position = position_dodge(0.3)) +
+#   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") 
+# 
+# 
+# 
+# 
+# ggplot() +
+#   geom_boxplot(data = data2, aes(y = 100 * diff_prop), fill = NA, alpha = 0.5, col = "grey") +
+#   geom_point(data = data2, aes(x = 0, y = 100 * diff_prop, col = seasonality, group = seasonal_profile),
+#              size = 2, position = position_dodge(0.3)) +
+#   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") 
+# 
+# 
+# 
+# data <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "annual_average", ]
+# ggplot() +
+#   geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
+#                fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
+#   new_scale_color() +
+#   geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+#              size = 2, position = position_dodge(0.3)) +
+#   geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
+#             position = position_dodge(0.3), alpha = 0.7) +
+#   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
+#   scale_x_discrete(labels = c("Rainfall\nTiming", "Optimal\nTiming")) +
 #   #facet_wrap(~insecticide, scales = "free_y") +
 #   theme_bw() +
 #   labs(x = "", y = "% Reduction in Incidence")
-
-# b <- ggplot() +
-#   geom_point(data = data2, aes(x = diff_prop * 100, y = inc_prop_red * 100,
-#                                col = seasonality)) +
-#   geom_segment(data = data2, aes(y = inc_prop_red * 100, yend = inc_prop_red * 100, x = 0, xend = diff_prop * 100, 
-#                                  col = seasonality)) +
-#   scale_y_continuous(position = "left", limits = c(18.7, 37.1)) +
-#   scale_colour_viridis(option = "magma", limits = c(0.25, 1), 
-#                        name = "Seasonality") +
-#   theme_bw() +
-#   labs(x = "% Increase\nin Impact") +
-#   theme(legend.position = "none",
-#         axis.line = element_blank(), #element_line(colour = "black"),
-#         axis.line.y = element_line(size = 0.25),
-#         axis.line.x = element_line(size = 0.25),
-#         axis.text.y = element_blank(),
-#         axis.ticks.y = element_blank(), 
-#         axis.title.y = element_blank(),
-#         panel.grid.major.x = element_blank(),
-#         panel.grid.minor = element_blank(),
-#         #panel.border = element_blank(),
-#         #panel.background = element_blank(),
-#         plot.margin = unit(c(1,1,0,-0.11), "cm")) +
-#   scale_x_continuous(expand = c(0, 0))
-# plot_grid(a, b, nrow = 1, rel_widths = c(1.5, 0.8), align = "h")
-
+# 
+# 
+# ggplot() +
+#   geom_boxplot(data = data2, aes(y = 100 * diff, col = seasonality), fill = NA, outlier.shape = NA) +
+#   geom_point(data = data2, aes(x = 0, y = 100 * diff, col = seasonality)) 
+# plot(data2$seasonality, data2$diff)
+# 
+# 
+# data <- overall_df[overall_df$insecticide == "clothi" &
+#                      overall_df$timing_type != "annual_average", ]
+# data2 <- data %>%
+#   dplyr::select(seasonal_profile, seasonality, inc_prop_red, timing_type) %>%
+#   pivot_wider(id_cols = c("seasonal_profile", "seasonality"), names_from = timing_type, values_from = inc_prop_red) %>%
+#   mutate(diff = maximum - rainfall)
+# 
+# ggplot() +
+#   geom_boxplot(data = data2, aes(y = 100 * diff, col = seasonality), fill = NA, outlier.shape = NA) +
+#   geom_point(data = data2, aes(x = 0, y = 100 * diff, col = seasonality)) 
+# plot(data2$seasonality, data2$diff)
+# 
+# summary(lm(data2$diff ~ 0 + data2$seasonality))
+# 
+# ggplot(overall_df[overall_df$insecticide == "clothi" & overall_df$timing_type != "annual_average", ]) +
+#   geom_line(aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
+#             alpha = 0.2, position = position_dodge(0.1)) +
+#   geom_boxplot(aes(x = timing_type, y = 100 * inc_prop_red, fill = timing_type, col = timing_type),
+#                fill = NA, outlier.shape = NA) + 
+#   geom_point(aes(x = timing_type, y = 100 * inc_prop_red, col = timing_type, group = seasonal_profile), 
+#              size = 1, position = position_dodge(0.1)) 
+# 
+# ggplot(overall_df[overall_df$insecticide == "clothi" & overall_df$timing_type != "annual_average", ]) +
+#   geom_line(aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
+#             alpha = 0.2, position = position_dodge(0.1)) +
+#   geom_point(aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, fill = timing_type), 
+#              size = 1, position = position_dodge(0.1)) +
+#   geom_boxplot(aes(x = timing_type, y = 100 * inc_prop_red, fill = timing_type),
+#                fill = NA, outlier.shape = NA) 
+# 
+# 
+# 
+# # ggplot() +
+# #   geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
+# #                fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
+# #   new_scale_color() +
+# #   geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+# #              size = 2, position = position_dodge(0.3)) +
+# #   geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
+# #             position = position_dodge(0.3), alpha = 0.7) +
+# #   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
+# #   scale_x_discrete(labels = c("Random\nMonth", "Optimal\nTiming")) +
+# #   #facet_wrap(~insecticide, scales = "free_y") +
+# #   theme_bw() +
+# #   labs(x = "", y = "% Reduction in Incidence")
+# # data <- overall_df[overall_df$insecticide == "ben", ]
+# # data$timing_type <- factor(data$timing_type, levels = c("annual_average", "maximum", "rainfall"))
+# # ggplot() +
+# #   geom_boxplot(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = timing_type),
+# #                fill = NA, outlier.shape = NA, alpha = 0.25, col = "grey") + 
+# #   new_scale_color() +
+# #   geom_point(data = data, aes(x = timing_type, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+# #              size = 2, position = position_dodge(0.3)) +
+# #   geom_line(data = data, aes(x = timing_type, y = 100 * inc_prop_red, group = seasonal_profile, col = seasonality),
+# #             position = position_dodge(0.3), alpha = 0.7) +
+# #   scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
+# #   scale_x_discrete(labels = c("Random\nMonth", "Optimal\nTiming")) +
+# #   #facet_wrap(~insecticide, scales = "free_y") +
+# #   theme_bw() +
+# #   labs(x = "", y = "% Reduction in Incidence")
+# 
+# # b <- ggplot() +
+# #   geom_point(data = data2, aes(x = diff_prop * 100, y = inc_prop_red * 100,
+# #                                col = seasonality)) +
+# #   geom_segment(data = data2, aes(y = inc_prop_red * 100, yend = inc_prop_red * 100, x = 0, xend = diff_prop * 100, 
+# #                                  col = seasonality)) +
+# #   scale_y_continuous(position = "left", limits = c(18.7, 37.1)) +
+# #   scale_colour_viridis(option = "magma", limits = c(0.25, 1), 
+# #                        name = "Seasonality") +
+# #   theme_bw() +
+# #   labs(x = "% Increase\nin Impact") +
+# #   theme(legend.position = "none",
+# #         axis.line = element_blank(), #element_line(colour = "black"),
+# #         axis.line.y = element_line(size = 0.25),
+# #         axis.line.x = element_line(size = 0.25),
+# #         axis.text.y = element_blank(),
+# #         axis.ticks.y = element_blank(), 
+# #         axis.title.y = element_blank(),
+# #         panel.grid.major.x = element_blank(),
+# #         panel.grid.minor = element_blank(),
+# #         #panel.border = element_blank(),
+# #         #panel.background = element_blank(),
+# #         plot.margin = unit(c(1,1,0,-0.11), "cm")) +
+# #   scale_x_continuous(expand = c(0, 0))
+# # plot_grid(a, b, nrow = 1, rel_widths = c(1.5, 0.8), align = "h")
+# 
