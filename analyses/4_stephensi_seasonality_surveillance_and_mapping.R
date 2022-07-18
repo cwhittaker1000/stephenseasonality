@@ -1,7 +1,7 @@
 # Loading Required Libraries
-library(tidyverse); library(sf); library(tidymodels)
+library(tidyverse); library(sf); library(tidymodels); library(cowplot)
 library(sp); library(raster); library(rgeos); library(rgdal); library(maptools); library(dplyr); 
-library(tidyr); library(maps);library(scales); library(here); library(zoo)
+library(tidyr); library(maps);library(scales); library(here); library(zoo); library(RColorBrewer)
 
 # Loading in custom functions
 source(here("functions", "time_series_characterisation_functions.R"))
@@ -37,8 +37,7 @@ envt_variables <- read.csv(here("data", "environmental_covariates", "location_ec
 cluster_membership <- readRDS(here("data", "systematic_review_results", "cluster_membership.rds"))
 cluster_membership <- cluster_membership[, c("id", "cluster")]
 overall <- ts_metadata %>%
-  left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
-overall <- overall %>%
+  left_join(envt_variables, by = c("id", "country", "admin1", "admin2")) %>%
   left_join(cluster_membership, by = "id")
 
 # Loading In Environmental Covariates 
@@ -174,13 +173,10 @@ hoa_neighbours <- rbind(ken_shp, egy_shp, uga_shp, drc_shp, ssd_shp, car_shp, ua
 
 # Average Over the Random Forest Outputs
 all_rasters <- bind_rows(raster_iterations) %>% # alt: all_rasters <- do.call("rbind", raster_iterations)
-  group_by(x, y) %>%
-  summarise(layer = mean(layer, na.rm = TRUE))
+  dplyr::group_by(x, y) %>%
+  dplyr::summarise(layer = mean(layer, na.rm = TRUE))
 fig4a <- ggplot() +
   geom_tile(data = all_rasters, aes(x = x, y = y, fill = layer)) +
-  # scale_fill_gradient2(low = muted("red"), mid = "white", high = muted("blue"),
-  #                      midpoint = 0.5, limits = c(0, 1), space = "Lab",
-  #                      na.value = "grey50", guide = "colourbar") +
   scale_fill_gradient2(low = palette()[1], mid = "white", high = palette()[2],
                        midpoint = 0.5, limits = c(0, 1), space = "Lab",
                        na.value = "grey50", guide = "colourbar") +
@@ -199,21 +195,7 @@ fig4a <- ggplot() +
         legend.title = element_text(size = 11, face = "bold")) +
   guides(fill = guide_colourbar(title = "Seasonality", ticks = FALSE))
 
-# Annual Catch Figures Describing Seasonality 
-cluster <- readRDS(here("data", "systematic_review_results", "cluster_membership.rds"))
-mean_one <- mean(ts_metadata$per_ind_4_months[cluster$cluster == 1])
-mean_two <- mean(ts_metadata$per_ind_4_months[cluster$cluster == 2])
-fig4b <- ggplot(ts_metadata, aes(x = 100 * per_ind_4_months, fill = factor(peaks))) +
-  geom_histogram(bins = 10, colour = "dark grey", position = "identity", alpha = 0.4) +
-  theme_bw() +
-  geom_segment(x = 100 * mean_one, xend = 100 * mean_one, y = 0, yend = 17, size = 1, col = palette()[2], linetype = "dashed") +
-  geom_segment(x = 100 * mean_two, xend = 100 * mean_two, y = 0, yend = 17, size = 1, col = palette()[1], linetype = "dashed") + 
-  scale_fill_manual(values = palette()[2:1]) + 
-  scale_x_continuous(breaks = seq(30, 100, 10)) +
-  labs(fill = "Cluster", x = "% of Annual Catch In 4 Months", y = "Number of Studies") +
-  theme(legend.position = "left")
-
-# Extracting Mean Realisations
+# Extracting the Mean Fitted Profile for Each Time Series
 id <- overall$id
 interpolating_points <- 2
 prior <- "informative"
@@ -221,289 +203,250 @@ mean_realisation <- matrix(nrow = length(id), ncol = (12 * interpolating_points 
 overdisp <- vector(mode = "numeric",length = length(id))
 for (i in 1:length(id)) {
   
-  index <- id[i]
-  
   # Loading in and processing the fitted time-series
+  index <- id[i]
   if (prior == "informative") {
     STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", index, ".rds"))
   } else if (prior == "uninformative") {
     STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/uninformative/"), "/uninf_periodic_fit_", index, ".rds"))
   }  
   
-  # Extracting the mean fitted time-series
+  # Extracting the mean fitted temporal profile
   timepoints <- STAN_output$timepoints
   all_timepoints <- STAN_output$all_timepoints
-  ordered_timepoints <- all_timepoints[order(all_timepoints)]
   MCMC_output <- STAN_output$chain_output
   f <- MCMC_output[, grepl("f", colnames(MCMC_output))]
   f_mean <- apply(f, 2, mean)
   negbinom_intensity_mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
   mean_realisation[i, ] <- negbinom_intensity_mean
-  overdisp[i] <- mean(MCMC_output[, "overdispersion"])
 }
 
-# Annual Surveillance Considerations - Probability of Detecting Stephensi If Catches Only Done In X Months
-normalised_output <- t(apply(mean_realisation, 1, normalise_total))
+# Interpolate to Get Daily Biting Rate and then Normalise By Total Density
+daily_vector_density <- t(apply(mean_realisation, 1, approx_min_output)) # interpolate to get daily biting rate
+monthly_vector_density <- t(apply(daily_vector_density, 1, conv_daily_to_monthly)) # average over month
+normalised_monthly_vector_density <- t(apply(monthly_vector_density, 1, normalise_total)) # normalise within each time-series
+peak_density_month <- apply(normalised_monthly_vector_density, 1, function(x) which(x == max(x))) # get month of peak density
 
-# Reordering mean fitted time-series to start at max
-reordered_mean_realisation <- matrix(nrow = length(id), ncol = (12 * interpolating_points + 1))
-start_index <- apply(normalised_output, 1, function(x) which(x == max(x)))
-end_index <- dim(reordered_mean_realisation)[2]
-for (i in 1:length(id)) {
-  reordered_mean_realisation[i, ] <- normalised_output[i, c(start_index[i]:end_index, 1:(start_index[i]-1))]
-}
-one_output <- reordered_mean_realisation[cluster_membership$cluster == 1, ]
-mean_one_output <- apply(one_output, 2, mean)
-
-two_output <- reordered_mean_realisation[cluster_membership$cluster == 2, ]
-mean_two_output <- apply(two_output, 2, mean)
-
-aug_norm_output <- rbind(normalised_output, mean_one_output, mean_two_output)
-
-summary_probs <- array(dim = c(length(id) + 2, 12, 3))
-p_overall <- 1
-for (k in 1:67) {
-  
-  # Generating Monthly Relative Probabilities of Finding Stephensi and Multiplying By Defined Overall Prob Detection Given Present
-  time_series <- aug_norm_output[k, ]
-  avg_month_prob <- vector(mode = "numeric", length = 12L)
+# Extracting Rainfall Data (also sort out leap year stuff)
+months_length <- c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+rainfall_storage <- matrix(nrow = dim(overall)[1], ncol = length(months_length)) 
+for (i in 1:length(overall$id)) {
+  index <- overall$id[i]
+  temp <- c()
+  rf <- read.csv(here(paste0("data/location_specific_rainfall/rainfall_ts", index, ".csv")))
+  rf <- rf %>%
+    group_by(daymonth_id) %>%
+    summarise(rainfall = mean(rainfall))
   counter <- 1
-  for (i in 1:length(avg_month_prob)) {
-    if (i < 12) {
-      avg_month_prob[i] <- mean(time_series[c(counter, counter + 1)])
-      counter <- counter + 2
-    } else {
-      avg_month_prob[i] <- mean(time_series[c(counter, counter + 1, counter + 2)])
-      counter <- counter + 2
-    }
+  count_vec <- counter
+  for (j in 1:length(months_length)) {
+    indices <- counter:(counter + months_length[j] - 1)
+    temp <- c(temp, sum(rf$rainfall[indices]))
+    counter <- counter + months_length[j]
   }
-  p_zero_caught <- 1 - (avg_month_prob/max(avg_month_prob) * p_overall) # option1 <- Alt = 1 - (test * 0.5)
+  rainfall_storage[i, ] <- temp
+}
+peak_rainfall_month <- apply(rainfall_storage, 1, function(x) which(x == max(x)))
+
+# Exploring the Impact of Different Surveillance Strategies:
+#   Premise behind this is that we want to vary:
+#     -> effort (number of nights sampled and how many months you sample for)
+#     -> timing (when you sample, whether months are contiguous etc)
+
+# Simulating Strategies With Sequential Monthly Sampling 
+EIR <- 1
+sporozoite_prev <- 0.05
+ABR <- EIR/sporozoite_prev
+num_months_sampled <- 1:12 # varying effort 
+num_nights_per_month <- 1:10 # varying effort
+
+# For single time series and contiguous sampling (so 12 possible combinations of sampled months all differing
+# by starting point)
+prob_not_sampled_basic <- array(data = NA, dim = c(65, 12, 10, 12))
+prob_not_sampled_poisson <- array(data = NA, dim = c(65, 12, 10, 12))
+for (t in 1:65) {
   
-  # Iterating Over All Possible Start Months and All Possible Number of Consecutive Months Sampled
-  #   rows are the month we start at
-  #   columns are the number of months we consider
-  prob_matrix <- matrix(data = NA, nrow = 12, ncol = 12)
-  for (i in 1:12) {
-    for (j in 1:12) {
-      if ((i+j-1) > 12) {
-        indices <- c(i:12, 1:(j - length(i:12)))
+  monthly_density <- normalised_monthly_vector_density[t, ]
+  monthly_prob_sampled <- monthly_density * ABR/c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31) # not sure if this is quite right - need to double check
+  for (i in 1:length(num_months_sampled)) {
+    
+    # Extract num months to be sampled and Generate matrix of all possible contiguous months to sample at 
+    months_sampled <- num_months_sampled[i]
+    sampling_mat <- matrix(0, 12, months_sampled)
+    sampling_mat <- col(sampling_mat) + row(sampling_mat) - 1
+    sampling_mat[sampling_mat > 12] <- sampling_mat[sampling_mat > 12] - 12
+    
+    # Extract num nights sampling per month for each run and duplicate entries in matrix as required
+    for (j in 1:length(num_nights_per_month)) {
+      
+      nights_per_month <- num_nights_per_month[j]
+      if (months_sampled == 1 & nights_per_month == 1) {
+        overall_sampling_mat <- t(t(apply(sampling_mat, 1, rep, each = nights_per_month)))
       } else {
-        indices <- i:(i+j-1)
+        overall_sampling_mat <- t(apply(sampling_mat, 1, rep, each = nights_per_month))
       }
-      temp_p <- prod(p_zero_caught[indices])
-      prob_matrix[i, j] <- temp_p
+      
+      for (k in 1:12) {
+        temp_probs <-  monthly_prob_sampled[overall_sampling_mat[k, ]]
+        temp_probs[temp_probs > 1] <- 1
+        prob_not_sampled_basic[t, i, j, k] <- prod(1 - temp_probs)
+        
+        temp_lambda_indiv <- monthly_prob_sampled[overall_sampling_mat[k, ]]
+        temp_lambda_combined <- sum(temp_lambda_indiv) 
+        prob_not_sampled_poisson[t, i, j, k] <- exp(-temp_lambda_combined) # p(k=0) from Poisson dist; equivalent to dpois(x = 0, lambda = temp_lambda_combined)
+      }
     }
   }
-  temp_median_prob <- apply(prob_matrix, 2, quantile, prob = c(0.25, 0.5, 0.75))
-  summary_probs[k, , ] <- t(temp_median_prob)
-  print(k)
+  print(t)
 }
 
-lower_probs <- summary_probs[1:65, , 1]
-median_probs <- summary_probs[1:65, , 2]
-upper_probs <- summary_probs[1:65, , 3]
+# Heatmaps Exploring Range of Sampling Effort
+#     1st dim is the time series
+#     2nd dim is the number of months sampled
+#     3rd dim is the number of nights per month sampled
+#     4th dim is which month you start at 
+dim <- 5
+not_sampled_vector_peak_absolute_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_rainfall_peak_absolute_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_rainfall_peak_plus_absolute_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_annual_avg_absolute_summary <- array(data = NA, dim = c(65, dim, dim))
 
-cluster_one_median <- data.frame(time = seq(1, 12), median = summary_probs[66, , 2], lower = summary_probs[66, , 1], upper = summary_probs[66, , 3])
-cluster_two_median <- data.frame(time = seq(1, 12), median = summary_probs[67, , 2], lower = summary_probs[67, , 1], upper = summary_probs[67, , 3])
+not_sampled_vector_annual_diff_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_vector_rainfall_diff_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_vector_rainfall_peak_plus_diff_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_rainfall_annual_diff_summary <- array(data = NA, dim = c(65, dim, dim))
+not_sampled_rainfall_peak_plus_annual_diff_summary <- array(data = NA, dim = c(65, dim, dim))
 
-median_summary <- data.frame(id = rep(id, 3), stat = c(rep("med", 65), rep("low", 65), rep("high", 65)),
-                             cluster = rep(cluster_membership$cluster, each = 3), 
-                             rbind(median_probs, lower_probs, upper_probs)) %>%
-  pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
-  mutate(time = as.numeric(gsub("X", "", time))) %>%
-  group_by(time, stat, cluster) %>%
-  summarise(median = median(prob),
-            lower = min(prob),
-            upper = max(prob)) %>%
-  pivot_wider(names_from = "stat", 
-              values_from = median:upper)#
-medians <- data.frame(id = id, median_probs) %>%
-  pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
-  mutate(time = as.numeric(gsub("X", "", time)))
+for (i in 1:65) {
+  ts_peak_vector_month <- peak_density_month[i] 
+  ts_peak_rainfall_month <- peak_rainfall_month[i] 
+  ts_peak_rainfall_plus_month <- (ts_peak_rainfall_month + 1) %% 12
+  ts_peak_rainfall_plus_month <- ifelse(ts_peak_rainfall_plus_month == 0, 12, ts_peak_rainfall_plus_month)
+  
+  not_sampled_vector_peak_absolute_summary[i, 1:dim, 1:dim] <- 1- prob_not_sampled_poisson[i, 1:dim, 1:dim, ts_peak_vector_month]
+  not_sampled_rainfall_peak_absolute_summary[i, 1:dim, 1:dim] <- 1 - prob_not_sampled_poisson[i, 1:dim, 1:dim, ts_peak_rainfall_month]
+  not_sampled_rainfall_peak_plus_absolute_summary[i, 1:dim, 1:dim] <- 1 - prob_not_sampled_poisson[i, 1:dim, 1:dim, ts_peak_rainfall_plus_month]
+  not_sampled_annual_avg_absolute_summary[i, 1:dim, 1:dim] <- 1 - apply(prob_not_sampled_poisson[i, 1:dim, 1:dim, 1:12], c(1, 2), mean)
+  
+  not_sampled_vector_annual_diff_summary[i, 1:dim, 1:dim] <- not_sampled_vector_peak_absolute_summary[i, 1:dim, 1:dim] - not_sampled_annual_avg_absolute_summary[i, 1:dim, 1:dim]
+  not_sampled_vector_rainfall_diff_summary[i, 1:dim, 1:dim] <- not_sampled_vector_peak_absolute_summary[i, 1:dim, 1:dim] - not_sampled_rainfall_peak_absolute_summary[i, 1:dim, 1:dim]
+  not_sampled_vector_rainfall_peak_plus_diff_summary[i, 1:dim, 1:dim] <- not_sampled_vector_peak_absolute_summary[i, 1:dim, 1:dim] - not_sampled_rainfall_peak_plus_absolute_summary[i, 1:dim, 1:dim]
+  not_sampled_rainfall_annual_diff_summary[i, 1:dim, 1:dim] <- not_sampled_rainfall_peak_absolute_summary[i, 1:dim, 1:dim] - not_sampled_annual_avg_absolute_summary[i, 1:dim, 1:dim]
+  not_sampled_rainfall_peak_plus_annual_diff_summary[i, 1:dim, 1:dim] <- not_sampled_rainfall_peak_plus_absolute_summary[i, 1:dim, 1:dim] - not_sampled_annual_avg_absolute_summary[i, 1:dim, 1:dim]
+}
 
-fig4c <- ggplot(median_summary) +
-  geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med, fill = factor(cluster)), alpha = 0.1) +
-  geom_path(aes(x = time, y = median_med, colour = factor(cluster)), size = 1) +
-  scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
-  scale_fill_manual(values = palette()[2:1]) + 
-  scale_colour_manual(values = palette()[2:1]) + 
-  labs(y = "Probability of Missing Anopheles Stephensi", x = "Number of Consecutive Months Sampled") +
+max <- max(apply(not_sampled_vector_peak_absolute_summary, c(2, 3), mean))
+size <- 12
+
+temp1 <- apply(not_sampled_annual_avg_absolute_summary, c(2, 3), mean)
+temp1 <- data.frame(temp1)
+temp1$Y <- paste0("Y", 1:dim)
+temp1$Y <- factor(temp1$Y, levels = paste0("Y", 1:dim))
+temp1$sampling_start <- "Annual Average"
+
+temp2 <- apply(not_sampled_rainfall_peak_absolute_summary, c(2, 3), mean)
+temp2 <- data.frame(temp2)
+temp2$Y <- paste0("Y", 1:dim)
+temp2$Y <- factor(temp2$Y, levels = paste0("Y", 1:dim))
+temp2$sampling_start <- "Rainfall Peak"
+
+temp3 <- apply(not_sampled_vector_peak_absolute_summary, c(2, 3), mean)
+temp3 <- data.frame(temp3)
+temp3$Y <- paste0("Y", 1:dim)
+temp3$Y <- factor(temp3$Y, levels = paste0("Y", 1:dim))
+temp3$sampling_start <- "Vector Peak"
+
+temp_long <- rbind(temp1, temp2, temp3) %>%
+  pivot_longer(cols = -c(Y, sampling_start), names_to = "X")
+temp_long$X  <- factor(temp_long$X, levels = unique(temp_long$X))
+temp_long$sampling_start  <- factor(temp_long$sampling_start, 
+                                    levels = c("Annual Average", "Rainfall Peak", "Vector Peak"))
+
+sampling_heatmaps <- ggplot(temp_long) +
+  geom_tile(aes(x = Y, y = X, fill = value)) +
+  scale_y_discrete(position = "left", labels = 1:dim) +
+  scale_fill_viridis_c(option = "magma", name = "Prob. of\nDetection",
+                       limits = c(0, max)) +
+  theme(plot.title = element_text(size=size)) +
+  scale_x_discrete(labels =  1:dim) +
+  facet_wrap(~sampling_start) +
+  geom_rect(aes(xmin = 2.5, xmax = 3.5, ymin = 2.5, ymax = 3.5),
+            fill = NA, col = "black") +
   theme_bw() +
-  theme(legend.position = "none")
+  theme(strip.background = element_rect(fill = "white")) +
+  labs(y = "Sampling Days Per Month", x = "Number of Months Sampled") 
 
-#fig4c <- ggplot(median_summary) +
-  #geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med), fill = "dark grey", alpha = 0.2) +
-  #geom_ribbon(aes(x = time, ymin = lower_med, ymax = upper_med), fill = "#70798C", alpha = 0.2) +
-  #geom_path(aes(x = time, y = median_med), size = 1, colour = "#70798C") +
-  # geom_path(data = cluster_one_median, aes(x = time, y = median), colour = palette()[2], size = 1) +
-  # geom_ribbon(data = cluster_one_median, aes(x = time, ymin = lower, ymax = upper), fill = palette()[2], alpha = 0.2) +
-  # geom_path(data = cluster_two_median, aes(x = time, y = median), colour = palette()[1], size = 1) +
-  # geom_ribbon(data = cluster_two_median, aes(x = time, ymin = lower, ymax = upper), fill = palette()[1], alpha = 0.2) +
-  # geom_path(data = medians, aes(x = time, y = prob, group = id), alpha = 0.2) +
-  # scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
-  # scale_y_continuous(limits = c(0, 1)) +
-  # labs(y = "Probability of Missing Anopheles Stephensi", x = "Number of Consecutive Months Sampled") +
-  # theme_bw()
-
-fig4subset <- cowplot::plot_grid(fig4b, fig4c, ncol = 1)
-fig4overall <- cowplot::plot_grid(fig4subset, fig4a, rel_widths = c(1, 1.3)) ## 9.5 * 6.25 (h x w)
-
-fig4b <- fig4b +
-  theme(legend.position = "right")
-fig4a <- fig4a +
-  theme(legend.position = c(0.85, 0.80))
-fig4subset <- cowplot::plot_grid(fig4b, fig4c, ncol = 1, align = "v", axis = "l")
-fig4overall <- cowplot::plot_grid(fig4a, fig4subset, rel_widths = c(1.25, 1)) ## 9.5 * 6.25 (h x w)
-ggsave(fig4overall, file = here("figures", "Fig4_Overall.pdf"), width = 9.5, height = 6.15)
-
-######################################################################
-######################################################################
-
-# alt_summary <- data.frame(id = rep(id, 3), rbind(median_probs, lower_probs, upper_probs)) %>%
-#   pivot_longer(cols = X1:X12, names_to = "time", values_to = "prob") %>%
-#   mutate(time = as.numeric(gsub("X", "", time))) %>%
-#   group_by(time) %>%
-#   summarise(median = median(prob),
-#             lower = min(prob),
-#             upper = max(prob)) 
-# alt_summary_plot <- ggplot(alt_summary) +
-#   geom_path(aes(x = time, y = median)) +
-#   geom_ribbon(aes(x = time, ymin = lower, ymax = upper), alpha = 0.2) +
-#   scale_x_continuous(breaks = seq(1, 12, 1), limits = c(1, 12)) +
-#   labs(y = "Probability of Missing Anopheles Stephensi",
-#        x = "Number of Months Sampled")
-# 
-# # Monthly Surveillance Considerations
-# unsmoothed_counts <- readRDS(here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds")) %>%
-#   dplyr::select(id, Jan:Dec) %>%
-#   pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "catch") %>%
-#   group_by(id) %>%
-#   summarise(num_months = sum(!is.na(catch)),
-#             total_catch = sum(catch, na.rm = TRUE),
-#             avg_catch = total_catch/num_months)
-# # 
-# overdisp_df <- data.frame(overdisp = overdisp, catch = log(unsmoothed_counts$avg_catch))
-# 
-# linear_with_int <- glm(overdisp ~ catch, data = overdisp_df)
-# linear_int_coefs <- coef(linear_with_int)
-# 
-# linear_no_int <- glm(overdisp ~ 0 + catch, data = overdisp_df)
-# linear_no_coefs <- coef(linear_no_int)
-# 
-# test_catches <- seq(0, 10, 1)
-# plot(log(unsmoothed_counts$avg_catch), overdisp, ylim = c(0, 6), xlim = c(0, 6.5))
-# lines(test_catches, linear_int_coefs[1] + linear_int_coefs[2] * test_catches)
-# lines(test_catches, linear_no_coefs[1] * test_catches, col = "red")
-# 
-# perc <- c(0.01, 0.05, 0.1, 0.2, 0.5, 1)
-# catch <- c(5, 10, 25, 50, 100, 200, 500)
-# 
-# mean(unsmoothed_counts$avg_catch)
-# median(unsmoothed_counts$avg_catch)
-# 
-# inputs <- data.frame(catch = log(catch))
-# with_int_preds <- predict(linear_with_int, inputs)
-# no_int_preds <- predict(linear_no_int, inputs)
-# probs <- array(dim = c(length(perc), length(catch), 2)) # rows = catch size, cols = % pop = stephensi
-# for (i in 1:length(perc)) {
-#   for (j in 1:length(catch)) {
-#     probs[i, j, 1] <- 1 - dnbinom(0, mu = perc[i] * catch[j], size = no_int_preds[j])
-#     probs[i, j, 2] <- 1 - dnbinom(0, mu = perc[i] * catch[j], size = with_int_preds[j])
-#   }
-# }
-# 
-# dnbinom(0, mu = 1, size = 3)
-# dnbinom(0, mu = 1, size = 0.5)
-# 
-# x <- probs[, , 1]
-# y <- probs[, , 2]
-# 
-# temp_rest <- rnbinom(25000, mu = 99, size = no_int_preds[1])
-# x <- data.frame(catch = seq(1, 100000, 1))
-# y <- predict(linear_with_int, log(x))
-# preds <- dnbinom(0, mu = x$catch, size = y)
-# plot(log(x$catch), preds, type = "l", ylim = c(0, 1))
-# 
-# x <- data.frame(catch = seq(1, 100000, 1))
-# y <- predict(linear_no_int, log(x))
-# preds <- dnbinom(0, mu = x$catch, size = y)
-# lines(log(x$catch), preds, col = "red")
-# 
-# inputs <- data.frame(catch = c(log(10), log(100), log(1000)))
-# with_int_preds <- predict(linear_with_int, inputs)
-# no_int_preds <- predict(linear_no_int, inputs)
-# num <- 25000
-# mu <- c(10, 100, 1000)
-# ind <- vector(mode = "numeric", length = 3L)
-# par(mfrow = c(1, 2))
-# for (i in 1:3) {
-#   temp <- rnbinom(num, mu = mu[i], size = with_int_preds[i])
-#   ordered_temp <- temp[rev(order(temp))]
-#   summed_temp <- vector(mode = "numeric", length = num)
-#   for (j in 1:num) {
-#     summed_temp[j] <- sum(ordered_temp[1:j])/sum(ordered_temp)
-#   }
-#   if (i == 1) {
-#     plot(summed_temp, type = "l")
-#   } else {
-#     lines(summed_temp, type = "l")
-#   }
-#   temp_ind <- which(abs(summed_temp - 0.8) == min(abs((summed_temp - 0.8))))
-#   ind[i] <- temp_ind/num
-# }
-# 
-# hist(rnbinom(num, mu = 100, size = 0.5))
-# 
-# pnbinom(100, mu = 100, size = 0.1)
-# pnbinom(1000, mu = 1000, size = 4.195157)
-# 
-# test <- rnbinom(num, mu = 100, size = 3.34)
-# #hist(test)
-# ordered_test <- test[rev(order(test))]
-# summed <- vector(mode = "numeric", length = num)
-# for (i in 1:num) {
-#   summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
-# }
-# plot(summed)
-
-
-x <- seq(0, 1, 0.001)
-plot(qnbinom(x, mu = 100, size = 1.93), x)
-
-test <- rnbinom(10000, mu = 100, size = 3.34)
-hist(test)
-ordered_test <- test[rev(order(test))]
-
-a <- ecdf(ordered_test)
-plot(a)
-quantile(a, 0.8)
-
-par(mfrow = c(1, 2))
-num <- 10000
-test <- rnbinom(num, mu = 100, size = 3.34)
-#hist(test)
-ordered_test <- test[rev(order(test))]
-summed <- vector(mode = "numeric", length = num)
-for (i in 1:num) {
-  summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
+# Cumulative Probability Plots
+#   1st dim is the time series
+#   2nd dim is the number of months sampled
+#   3rd dim is the number of nights per month sampled
+#   4th dim is which month you start at 
+not_sampled_vector_peak_absolute_summary <- array(data = NA, dim = c(65, 12, 3)) # 1-12 consecutive months sampled, 1-3 nights per month
+not_sampled_rainfall_peak_absolute_summary <- array(data = NA, dim = c(65, 12, 3))
+not_sampled_annual_avg_absolute_summary <- array(data = NA, dim = c(65, 12, 3))
+for (i in 1:65) {
+  ts_peak_vector_month <- peak_density_month[i] 
+  ts_peak_rainfall_month <- peak_rainfall_month[i] 
+  
+  not_sampled_vector_peak_absolute_summary[i, 1:12, 1:3] <- 1- prob_not_sampled_poisson[i, 1:12, 1:3, ts_peak_vector_month]
+  not_sampled_rainfall_peak_absolute_summary[i, 1:12, 1:3] <- 1 - prob_not_sampled_poisson[i, 1:12, 1:3, ts_peak_rainfall_month]
+  not_sampled_annual_avg_absolute_summary[i, 1:12, 1:3] <- 1 - apply(prob_not_sampled_poisson[i, 1:12, 1:3, 1:12], c(1, 2), mean)
 }
-plot(summed)
 
-test <- rnbinom(num, mu = 100, size = 0.5)
-#hist(test)
-ordered_test <- test[rev(order(test))]
-summed <- vector(mode = "numeric", length = num)
-for (i in 1:num) {
-  summed[i] <- sum(ordered_test[1:i])/sum(ordered_test)
-}
-ind <- which((summed - 0.8) == min(abs((summed - 0.8))))
+x <- not_sampled_vector_peak_absolute_summary[, , 3]
+mean <- apply(x, 2, mean)
+x <- data.frame(id = 1:65, cluster = overall$cluster, x) %>%
+  pivot_longer(-c(id, cluster), names_to = "months_sampled", values_to = "prob_detect")
+x$months_sampled <- factor(x$months_sampled, levels = paste0("X", 1:12))
+x$id <- factor(x$id)
+x$cluster <- factor(x$cluster)
+x$months_sampled <- as.numeric(gsub("X", "", x$months_sampled))
+temp <- data.frame(id = 1:65, cluster = overall$cluster, months_sampled = 0, prob_detect = 0)
+x <- rbind(x, temp)
+meanx <- x %>%
+  group_by(cluster, months_sampled) %>%
+  summarise(mean = mean(prob_detect))
 
-ind/num
+y <- not_sampled_rainfall_peak_absolute_summary[, , 3]
+mean <- apply(y, 2, mean)
+y <- data.frame(id = 1:65, cluster = overall$cluster, y) %>%
+  pivot_longer(-c(id, cluster), names_to = "months_sampled", values_to = "prob_detect")
+y$months_sampled <- factor(y$months_sampled, levels = paste0("X", 1:12))
+y$id <- factor(y$id)
+y$cluster <- factor(y$cluster)
+y$months_sampled <- as.numeric(gsub("X", "", y$months_sampled))
+temp <- data.frame(id = 1:65, cluster = overall$cluster, months_sampled = 0, prob_detect = 0)
+y <- rbind(y, temp)
+meany <- y %>%
+  group_by(cluster, months_sampled) %>%
+  summarise(mean = mean(prob_detect))
 
+x$sampling_start <- "Vector\nPeak"
+y$sampling_start <- "Rainfall\nPeak"
+meanx$sampling_start <- "Vector\nPeak"
+meany$sampling_start <- "Rainfall\nPeak"
+z <- rbind(x, y)
+z$cluster <- ifelse(z$cluster == 1, "Cluster 1", "Cluster 2")
+meanz <- rbind(meanx, meany)
+meanz$cluster <- ifelse(meanz$cluster == 1, "Cluster 1", "Cluster 2")
 
-pnorm(1.96, 0, 1)
-qnorm(0.975, 0, 1) # qnorm = CFDF
+cum_prob_plots <- ggplot() +
+  geom_line(data = z, aes(x = months_sampled, y = prob_detect, group = interaction(id, sampling_start), 
+                          col = sampling_start), alpha = 0.2) +
+  geom_line(data = meanz, aes(x = months_sampled, y = mean, col = sampling_start), alpha = 1, size = 2) +
+  facet_wrap(~cluster) +
+  scale_colour_manual(values = c("#2589BD", "#FC9F5B")) +
+  lims(x = c(0, 12), y = c(0, 1)) +
+  theme_bw() +
+  scale_x_continuous(breaks = seq(0, 12, 2)) +
+  labs(x = "Number of Months Sampled Following Peak",
+       y = "Probability of Successful Detection") +
+  theme(strip.background = element_rect(fill = "white"),
+        legend.position = "right") + 
+  guides(col = guide_legend(title = "Sampling\nStarts", nrow = 2))
 
-rnbinom(1, mu = 1, size = 4)
+fig4bc <- plot_grid(sampling_heatmaps, cum_prob_plots, nrow = 2, axis = "lr", align = "v")
 
-hist(rnbinom(10000, mu = 10, size = 2))
+fig4 <- plot_grid(fig4a, fig4bc, rel_widths = c(1, 1.5))
+fig4
+ggsave(here("figures", "Fig4_Overall.pdf"), fig4, width = 12.5, height = 6)
