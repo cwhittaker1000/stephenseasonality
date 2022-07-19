@@ -442,7 +442,7 @@ urban_rural_ts <- ggplot(summary_df, aes(x = timepoint, y = mean_dens , col = se
 
 figure3 <- cowplot::plot_grid(rf_plot, urban_rural_ts, nrow = 2, ncol = 1, rel_heights = c(1.1, 1), align = "v", axis = "br")
 figure3
-ggsave(filename = here("figures/Fig3_Overall.pdf"), plot = figure3, width = 12, height = 8)
+ggsave(filename = here("figures/Fig2_Part2_Raw.pdf"), plot = figure3, width = 12, height = 8)
 
 # Supplementary Figure - Upsample PDP and Covariate Profiling Plots
 ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData.rds"))

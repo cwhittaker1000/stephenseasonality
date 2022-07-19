@@ -342,7 +342,7 @@ second_irs_figure <- plot_grid(pirim_impact, ben_impact, nrow = 2)
 final_irs_figure <- plot_grid(irs_overall, second_irs_figure, ncol = 2, rel_widths = c(1, 1))
 final_irs_figure
 
-ggsave(filename = here("figures", "Fig5_Overall.pdf"), 
+ggsave(filename = here("figures", "Fig4_Overall.pdf"), 
                        plot = final_irs_figure, 
                        height = 9.1, 
                        width = 11.48)

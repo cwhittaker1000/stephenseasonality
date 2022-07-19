@@ -251,6 +251,8 @@ smoothed_rainfall <- t(apply(norm_rainfall_storage, 1, raster::movingFun, n = 4,
 rainfall_start_index <- apply(smoothed_rainfall, 1, function(x) which(x == max(x)))
 rainfall_seas_3 <- apply(norm_rainfall_storage, 1, percent_incidence, 3, 2)
 rainfall_seas_4 <- apply(norm_rainfall_storage, 1, percent_incidence, 4, 2)
+vector_seas_3 <- apply(reordered_mean_realisation, 1, percent_incidence, 3, 2)  
+vector_seas_4 <- apply(reordered_mean_realisation, 1, percent_incidence, 4, 2)  
 
 # Reordering rainfall time-series to start at max of vector density (note NOT max rainfall, which is what I calculate above)
 reordered_rainfall <- matrix(nrow = length(retain_index), ncol = length(months_length))
@@ -396,7 +398,7 @@ pca_df <- data.frame(cluster = factor(cluster_membership), PCA_output)
 pca_plot <- ggplot() +
   geom_polygon(data = ellipse_df, aes(x = PC2, y = PC1, fill = cluster), alpha = 0.2) +
   geom_point(data = pca_df, aes(x = PC2, y = PC1, col = cluster), size = 2) +
-  #coord_cartesian(xlim = c(-2.25, 5), ylim = c(-2.5, 8)) + 
+  coord_cartesian(xlim = c(-2.25, 5), ylim = c(-2.5, 8)) + 
   scale_fill_manual(values = colours[2:1]) +
   scale_colour_manual(values = colours[2:1]) +
   labs(x = "Principal Component 2 (15% Total Variation)",
@@ -423,6 +425,8 @@ cluster_time_series <- ggplot(cluster_df, aes(x = timepoint2, y = 100 * density 
   scale_color_manual(values = colours[2:1]) +
   labs(y = "Normalised Monthly Vector Density", x = "Peak-Standardised Time (Months)") +
   theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
+cluster_time_series2 <- cluster_time_series +
+  facet_wrap(~cluster, nrow = 1)
 
 set.seed(16)
 z <- data.frame(id = c(rep("dens", 65), rep("rain", 65)),
@@ -431,22 +435,76 @@ z <- data.frame(id = c(rep("dens", 65), rep("rain", 65)),
 t.test(per_ind ~ factor(cluster), data = z[z$id == "dens", ])
 t.test(per_ind ~ factor(cluster), data = z[z$id == "rain", ])
 
-cluster_catch_seasonality <- ggplot(z, aes(x = factor(cluster), y = 100 * per_ind, col = factor(cluster)))  +
-  geom_boxplot(fill = NA, outlier.shape = NA) +
+rain_vec_seas_comp <- data.frame(rainfall = rainfall_seas_4, vector = vector_seas_4, cluster = factor(cluster_membership)) 
+rain_vec_seas_plot <- ggplot(rain_vec_seas_comp, aes(x = 100 * rainfall, y = 100 * vector, fill = cluster)) +
+  geom_point(col = "black", shape = 21, size = 2) +
+  theme_bw() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = colours[2:1]) +
+  lims(x = c(35, 100), y = c(35, 100)) +
+  labs(y = "% Annual Vector Density In 4 Months", x = "% Annual Rainfall In 4 Months") +
+  theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
+
+peak_timing_comp <- data.frame(rainfall_peak = rainfall_start_index, vector_peak = start_index,
+                               peak_diff = features[, "peak_diff"] * 12/25, cluster = factor(cluster_membership))
+peak_timing_plot <- ggplot()  +
+  geom_boxplot(data = peak_timing_comp, aes(x = factor(cluster), y = peak_diff, col = factor(cluster)), 
+               fill = NA, outlier.shape = NA) +
+  scale_x_discrete(labels = c("Cluster 1", "Cluster 2")) +
+  geom_jitter(data = peak_timing_comp, aes(x = factor(cluster), y = peak_diff, fill = factor(cluster)), 
+              size = 2, width = 0.25, shape = 21, col = "black") +
+  theme_bw() +
+  scale_fill_manual(values = colours[2:1]) +
+  scale_colour_manual(values = colours[2:1]) +
+  theme(legend.position = "none", axis.title.x = element_blank()) +
+  labs(y = "Timing of Vector Density Peak Relative to Rainfall Peak (Months)")
+ggsave(peak_timing_plot, file = here("figures", "Supp_Peak_Timing.pdf"), width = 5.8, height = 5.8)
+
+mean(peak_timing_comp$peak_diff[peak_timing_comp$cluster == 1])
+mean(peak_timing_comp$peak_diff[peak_timing_comp$cluster == 2])
+t.test(peak_diff ~ cluster, data = peak_timing_comp)
+
+cluster_catch_seasonality <- ggplot()  +
+  geom_boxplot(data = z, aes(x = factor(cluster), y = 100 * per_ind, col = factor(cluster)), fill = NA, outlier.shape = NA) +
   facet_wrap(~id, nrow = 2, strip.position = "right",
              labeller = as_labeller(c(dens = "% Annual Density In 4 Months", rain = "% Annual Rainfall In 4 Months"))) +
-  scale_color_manual(values = colours[2:1]) +
   scale_x_discrete(labels = c("Cluster 1", "Cluster 2")) +
-  geom_jitter(aes(x = factor(cluster), y = 100 * per_ind), size = 1, width = 0.25) +
+  geom_jitter(data = z, aes(x = factor(cluster), y = 100 * per_ind, fill = factor(cluster)), 
+              size = 2, width = 0.25, shape = 21, col = "black") +
   theme_bw() +
+  scale_fill_manual(values = colours[2:1]) +
+  scale_colour_manual(values = colours[2:1]) +
   scale_y_continuous(position = "right", limits = c(35, 100)) +
   theme(legend.position = "none", axis.title.x = element_blank(), axis.title.y = element_blank(),
         strip.background = element_blank(), strip.placement = "outside")
 
-cluster_boxplots <- cowplot::plot_grid(cluster_time_series, cluster_catch_seasonality, ncol = 2, rel_widths = c(2, 1), axis = "b", align = "h")
-fig2_overall <- cowplot::plot_grid(pca_plot, cluster_boxplots, ncol = 2, rel_widths = c(2, 2.2))
+cluster_catch_seasonality2 <- ggplot()  +
+  geom_boxplot(data = z, aes(x = factor(cluster), y = 100 * per_ind, col = factor(cluster)), fill = NA, outlier.shape = NA) +
+  facet_wrap(~id, nrow = 1, strip.position = "top",
+             labeller = as_labeller(c(dens = "Vector Density", rain = "Rainfall"))) +
+  scale_x_discrete(labels = c("Cluster 1", "Cluster 2")) +
+  geom_jitter(data = z, aes(x = factor(cluster), y = 100 * per_ind, fill = factor(cluster)), 
+              size = 2, width = 0.25, shape = 21, col = "black") +
+  theme_bw() +
+  scale_fill_manual(values = colours[2:1]) +
+  scale_colour_manual(values = colours[2:1]) +
+  scale_y_continuous(name = "% Annual Total In 4 Months", position = "left", limits = c(35, 100)) +
+  theme(legend.position = "none", axis.title.x = element_blank(), 
+        strip.background = element_blank(), strip.placement = "outside")
+
+# cluster_boxplots <- cowplot::plot_grid(cluster_time_series, cluster_catch_seasonality, ncol = 2, rel_widths = c(2, 1), axis = "b", align = "h")
+# fig2_overall <- cowplot::plot_grid(pca_plot, cluster_boxplots, ncol = 2, rel_widths = c(2, 2.2))
+# if (fresh_run) {
+#   ggsave(fig2_overall, file = here("figures", "Fig2_OldPart1_Raw.pdf"), width = 10, height = 5)
+# }
+
+set.seed(10)
+plots <- cowplot::align_plots(cluster_time_series2, rain_vec_seas_plot, align = 'v', axis = 'lr')
+bottom_row <-  cowplot::plot_grid(plots[[2]], cluster_catch_seasonality2, axis = "bt", align = "h")
+fig2_part1_rhs <- cowplot::plot_grid(plots[[1]], bottom_row, nrow = 2)
+fig2_overall_alt <- cowplot::plot_grid(pca_plot, fig2_part1_rhs, ncol = 2, rel_widths = c(2, 2.2))
 if (fresh_run) {
-  ggsave(fig2_overall, file = here("figures", "Fig2_Overall_Raw.pdf"), width = 10, height = 5)
+  ggsave(fig2_overall_alt, file = here("figures", "Fig2_Part1_Raw.pdf"), width = 10, height = 5)
 }
 
 # Visualising the properties of each cluster

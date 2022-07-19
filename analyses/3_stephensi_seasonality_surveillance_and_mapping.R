@@ -175,7 +175,7 @@ hoa_neighbours <- rbind(ken_shp, egy_shp, uga_shp, drc_shp, ssd_shp, car_shp, ua
 all_rasters <- bind_rows(raster_iterations) %>% # alt: all_rasters <- do.call("rbind", raster_iterations)
   dplyr::group_by(x, y) %>%
   dplyr::summarise(layer = mean(layer, na.rm = TRUE))
-fig4a <- ggplot() +
+fig3a <- ggplot() +
   geom_tile(data = all_rasters, aes(x = x, y = y, fill = layer)) +
   scale_fill_gradient2(low = palette()[1], mid = "white", high = palette()[2],
                        midpoint = 0.5, limits = c(0, 1), space = "Lab",
@@ -445,8 +445,8 @@ cum_prob_plots <- ggplot() +
         legend.position = "right") + 
   guides(col = guide_legend(title = "Sampling\nStarts", nrow = 2))
 
-fig4bc <- plot_grid(sampling_heatmaps, cum_prob_plots, nrow = 2, axis = "lr", align = "v")
+fig3bc <- plot_grid(sampling_heatmaps, cum_prob_plots, nrow = 2, axis = "lr", align = "v")
 
-fig4 <- plot_grid(fig4a, fig4bc, rel_widths = c(1, 1.5))
-fig4
-ggsave(here("figures", "Fig4_Overall.pdf"), fig4, width = 12.5, height = 6)
+fig3 <- plot_grid(fig3a, fig3bc, rel_widths = c(1, 1.5))
+fig3
+ggsave(here("figures", "Fig3_Overall.pdf"), fig4, width = 12.5, height = 6)
