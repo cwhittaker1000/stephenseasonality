@@ -358,16 +358,19 @@ for (i in 1:length(for_plot_index)) {
 
 # Plotting all of the outputs to see which to feature in Fig 1A plot
 mean <- as.data.frame(mean_realisation)
+colnames(mean) <- paste0("V", seq(0.5, 12.5, 0.5))
 mean$country <- metadata$country[for_plot_index]
 mean_pv <- mean %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "mean")
 
 lower <- as.data.frame(lower_realisation)
+colnames(lower) <- paste0("V", seq(0.5, 12.5, 0.5))
 lower$country <- metadata$country[for_plot_index]
 lower_pv <- lower %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "lower")
 
 upper <- as.data.frame(upper_realisation)
+colnames(upper) <- paste0("V", seq(0.5, 12.5, 0.5))
 upper$country <- metadata$country[for_plot_index]
 upper_pv <- upper %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "upper")
@@ -382,7 +385,7 @@ total_per_country <- mean %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "catch") %>%
   group_by(country) %>%
   summarise(total = sum(catch))
-colnames(catch_data) <- c("country", seq(2, 24, length.out = 12)) 
+colnames(catch_data) <- c("country", seq(1, 12, length.out = 12)) 
 raw_catch_data <- catch_data %>%
   pivot_longer(-country, names_to = "timepoint", values_to = "raw_catch") %>%
   left_join(total_raw_catch, by = "country") %>%
@@ -396,15 +399,59 @@ overall <- mean_pv %>%
   mutate(timepoint = as.numeric(gsub("V", "", timepoint))) %>%
   left_join(raw_catch_data, by =  c("country", "timepoint"))
 
-b <- ggplot(data = overall) +
-  geom_path(aes(x = timepoint, y = mean, col = country), size = 2) +
-  geom_point(aes(x = timepoint, y = raw_catch)) +
-  geom_ribbon(aes(x = timepoint, ymin = lower, ymax = upper, fill = country), alpha = 0.2) +
+# Extracting Rainfall Data (also sort out leap year stuff)
+months_length <- c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+monthly_rainfall_storage <- matrix(nrow = length(for_plot_index), ncol = length(months_length)) 
+for (i in 1:length(metadata$id[for_plot_index])) {
+  index <- metadata$id[for_plot_index[i]]
+  print(index)
+  temp <- c()
+  rf <- read.csv(here(paste0("data/location_specific_rainfall/rainfall_ts", index, ".csv")))
+  rf <- rf %>%
+    dplyr::group_by(daymonth_id) %>%
+    dplyr::summarise(rainfall = mean(rainfall))
+  counter <- 1
+  count_vec <- counter
+  for (j in 1:length(months_length)) {
+    indices <- counter:(counter + months_length[j] - 1)
+    temp <- c(temp, sum(rf$rainfall[indices]))
+    counter <- counter + months_length[j]
+  }
+  monthly_rainfall_storage[i, ] <- temp
+}
+
+colnames(monthly_rainfall_storage) <- paste0("X", seq(1, 12, 1))
+monthly_rainfall_storage <- data.frame(id = for_plot_index, 
+                                       country = metadata$country[for_plot_index],
+                                       monthly_rainfall_storage)
+monthly_rainfall_storage <- monthly_rainfall_storage %>%
+  pivot_longer(cols = -c(id, country), names_to = "timepoint", values_to = "rainfall") %>%
+  mutate(timepoint = as.numeric(gsub("X", "", timepoint)))
+  
+overall_ft_rain <- overall %>%
+  left_join(monthly_rainfall_storage, by = c("country", "timepoint"))
+
+scaling_factor <- overall_ft_rain %>%
+  group_by(country) %>%
+  summarise(max_vector = max(upper, na.rm = TRUE),
+            max_rainfall = max(rainfall, na.rm = TRUE),
+            sf = max_vector/max_rainfall, na.rm = TRUE)
+overall_ft_rain_sf <- overall_ft_rain %>%
+  left_join(scaling_factor, by = c("country"))
+overall_ft_rain_sf_filtered <- overall_ft_rain_sf %>%
+  filter(!is.na(rainfall))
+
+b <- ggplot() +
+  geom_bar(data = overall_ft_rain_sf_filtered, aes(x = timepoint, y = rainfall * sf), stat = "identity", 
+           fill = "#DAFBFF", col = "light grey") +
+  geom_path(data = overall_ft_rain_sf, aes(x = timepoint, y = mean, col = country), size = 2) +
+  geom_point(data = overall_ft_rain_sf, aes(x = timepoint, y = raw_catch)) +
+  geom_ribbon(data = overall_ft_rain_sf, aes(x = timepoint, ymin = lower, ymax = upper, fill = country), alpha = 0.2) +
   facet_wrap(~country, scales = "free_y") +
   scale_y_continuous(limits=c(0, NA), position = "right") +
   scale_x_continuous(labels = c("J", "F", "M", "A", "M", "J", 
                                 "J", "A", "S", "O", "N", "D"),
-                     breaks = seq(2, 24, length.out = 12)) +
+                     breaks = seq(1, 12, length.out = 12)) +
   ylab("Monthly Catch") +
   theme_bw() +
   theme(legend.position = "none",
