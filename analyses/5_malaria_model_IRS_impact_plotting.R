@@ -133,6 +133,9 @@ for (i in 1:length(steph_seasonality_list)) {
 counterfactual <- readRDS(here("outputs", "malaria_model_IRS_running_counterfactuals.rds"))
 counterfactual <- bind_rows(counterfactual) %>%
   dplyr::rename(counterfactual_incidence = incidence, counterfactual_prevalence = prevalence)
+avg_ann_prev <- counterfactual %>%
+  group_by(seasonal_profile) %>%
+  summarise(avg_prev = mean(counterfactual_prevalence))
 
 # Joining IRS and no IRS results
 start <- ((years - 2) * 365)
@@ -286,6 +289,17 @@ ben_data3 <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type
 ben_data3$timing_type_new <- "average_comp"
 ben_data_overall <- rbind(ben_data, ben_data2, ben_data3)
 
+ben_mean <- ben_data_overall %>%
+  filter(!(timing_type == "maximum" & timing_type_new == "rainfall_comp")) %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type) %>%
+  pivot_wider(id_cols = seasonal_profile, values_from = inc_prop_red, names_from = timing_type) %>%
+  mutate(vec_rain_diff = maximum - rainfall,
+         rain_ann_diff = rainfall - annual_average,
+         vec_ann_diff = maximum - annual_average) %>%
+  summarise(mean_vec_rain = mean(vec_rain_diff/annual_average),
+            mean_rain_ann = mean(rain_ann_diff/annual_average),
+            mean_vec_ann = mean(vec_ann_diff/annual_average))
+
 set.seed(10)
 ben_impact <- ggplot() +
   geom_boxplot(data = ben_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = new_timing),
@@ -320,6 +334,17 @@ pirim_data3 <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_
 pirim_data3$timing_type_new <- "average_comp"
 pirim_data_overall <- rbind(pirim_data, pirim_data2, pirim_data3)
 
+pirim_mean <- pirim_data_overall %>%
+  filter(!(timing_type == "maximum" & timing_type_new == "rainfall_comp")) %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type) %>%
+  pivot_wider(id_cols = seasonal_profile, values_from = inc_prop_red, names_from = timing_type) %>%
+  mutate(vec_rain_diff = maximum - rainfall,
+         rain_ann_diff = rainfall - annual_average,
+         vec_ann_diff = maximum - annual_average) %>%
+  summarise(mean_vec_rain = mean(vec_rain_diff/annual_average),
+            mean_rain_ann = mean(rain_ann_diff/annual_average),
+            mean_vec_ann = mean(vec_ann_diff/annual_average))
+
 set.seed(10)
 pirim_impact <- ggplot() +
   geom_boxplot(data = pirim_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = new_timing),
@@ -346,3 +371,87 @@ ggsave(filename = here("figures", "Fig4_Overall.pdf"),
                        plot = final_irs_figure, 
                        height = 9.1, 
                        width = 11.48)
+
+##### Alt 
+
+# Plotting Bendiocarb Comparative Impact Depending On Timing
+ben_data <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type != "maximum", ] %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = ifelse(timing_type == "rainfall", 2, 1)) 
+ben_data$timing_type_new <- "average_comp"
+
+ben_data2 <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type == "maximum", ]  %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = 2) 
+ben_data2$timing_type_new <- "rainfall_comp"
+
+ben_data3 <- overall_df[overall_df$insecticide == "ben" & overall_df$timing_type == "rainfall", ]  %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = 1) 
+ben_data3$timing_type_new <- "rainfall_comp"
+
+ben_data_overall <- rbind(ben_data, ben_data2, ben_data3)
+
+set.seed(10)
+ben_impact <- ggplot() +
+  geom_boxplot(data = ben_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = new_timing),
+               fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
+  new_scale_color() +
+  geom_point(data = ben_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+             size = 2, position = position_dodge(0.3)) +
+  facet_wrap(~timing_type_new) +
+  geom_line(data = ben_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = seasonal_profile, 
+                                         col = seasonality), position = position_dodge(0.3), alpha = 0.5) +
+  scale_colour_viridis(option = "magma", limits = c(0.25, 1), name = "Seasonality") +
+  theme_bw() +
+  labs(x = "", y = "% Reduction in Incidence") +
+  theme(legend.position = "right", #plot.margin = unit(c(1,1,1,1), "cm"),
+        strip.background = element_blank(), strip.text = element_blank()) +
+  lims(y = c(9, 37.3)) +
+  scale_x_continuous(breaks = c(1, 2), labels = c("_____\nTiming", "_____\nTiming")) +
+  scale_y_continuous(limits = c(9, 37.3), position = "right")
+
+# Plotting Pirimithos Methyl Comparative Impact Depending On Timing
+pirim_data <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type != "maximum", ] %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = ifelse(timing_type == "rainfall", 2, 1)) 
+pirim_data$timing_type_new <- "average_comp"
+
+pirim_data2 <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type == "maximum", ]  %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = 2) 
+pirim_data2$timing_type_new <- "rainfall_comp"
+
+pirim_data3 <- overall_df[overall_df$insecticide == "pirim" & overall_df$timing_type == "rainfall", ]  %>%
+  dplyr::select(seasonal_profile, inc_prop_red, timing_type, seasonality) %>%
+  mutate(new_timing = 1) 
+pirim_data3$timing_type_new <- "rainfall_comp"
+
+pirim_data_overall <- rbind(pirim_data, pirim_data2, pirim_data3)
+
+set.seed(10)
+pirim_impact <- ggplot() +
+  geom_boxplot(data = pirim_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = new_timing),
+               fill = NA, outlier.shape = NA, alpha = 0.5, col = "grey") + 
+  new_scale_color() +
+  geom_point(data = pirim_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, col = seasonality, group = seasonal_profile),
+             size = 2, position = position_dodge(0.3)) +
+  facet_wrap(~timing_type_new) +
+  geom_line(data = pirim_data_overall, aes(x = new_timing, y = 100 * inc_prop_red, group = seasonal_profile, 
+                                           col = seasonality), position = position_dodge(0.3), alpha = 0.7) +
+  scale_colour_viridis(option = "viridis", limits = c(0.25, 1), name = "Seasonality") +
+  theme_bw() +
+  labs(x = "", y = "% Reduction in Incidence") +
+  theme(legend.position = "right", #plot.margin = unit(c(1,1,1,1), "cm"),
+        strip.background = element_blank(), strip.text = element_blank()) +
+  scale_x_continuous(breaks = c(1, 2), labels = c("_____\nTiming", "_____\nTiming")) +
+  scale_y_continuous(limits = c(32.5, 50), position = "right")
+
+second_irs_figure <- plot_grid(pirim_impact, ben_impact, nrow = 2)
+final_irs_figure <- plot_grid(irs_overall, second_irs_figure, ncol = 2, rel_widths = c(1, 1))
+final_irs_figure
+
+ggsave(filename = here("figures", "altFig4_Overall.pdf"), 
+       plot = final_irs_figure, 
+       height = 9.1, 
+       width = 11.48)

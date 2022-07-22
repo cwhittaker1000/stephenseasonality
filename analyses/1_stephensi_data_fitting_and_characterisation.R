@@ -447,6 +447,12 @@ rain_vec_seas_plot <- ggplot(rain_vec_seas_comp, aes(x = 100 * rainfall, y = 100
 
 peak_timing_comp <- data.frame(rainfall_peak = rainfall_start_index, vector_peak = start_index,
                                peak_diff = features[, "peak_diff"] * 12/25, cluster = factor(cluster_membership))
+peak_timing_mean <- peak_timing_comp %>%
+  group_by(cluster) %>%
+  summarise(mean = mean(peak_diff),
+            max = max(peak_diff),
+            min = min(peak_diff),
+            range = max - min)
 peak_timing_plot <- ggplot()  +
   geom_boxplot(data = peak_timing_comp, aes(x = factor(cluster), y = peak_diff, col = factor(cluster)), 
                fill = NA, outlier.shape = NA) +
@@ -477,6 +483,11 @@ cluster_catch_seasonality <- ggplot()  +
   scale_y_continuous(position = "right", limits = c(35, 100)) +
   theme(legend.position = "none", axis.title.x = element_blank(), axis.title.y = element_blank(),
         strip.background = element_blank(), strip.placement = "outside")
+
+# z %>%
+#   group_by(id, cluster) %>%
+#   summarise(mean = mean(per_ind),
+#             min = min(per_ind))
 
 cluster_catch_seasonality2 <- ggplot()  +
   geom_boxplot(data = z, aes(x = factor(cluster), y = 100 * per_ind, col = factor(cluster)), fill = NA, outlier.shape = NA) +

@@ -356,6 +356,10 @@ temp3$Y <- paste0("Y", 1:dim)
 temp3$Y <- factor(temp3$Y, levels = paste0("Y", 1:dim))
 temp3$sampling_start <- "Vector Peak"
 
+temp3[, -c(6:7)]/temp1[, -c(6:7)]
+temp3[, -c(6:7)]/temp2[, -c(6:7)]
+temp2[, -c(6:7)]/temp1[, -c(6:7)]
+
 temp_long <- rbind(temp1, temp2, temp3) %>%
   pivot_longer(cols = -c(Y, sampling_start), names_to = "X")
 temp_long$X  <- factor(temp_long$X, levels = unique(temp_long$X))
@@ -429,6 +433,10 @@ z <- rbind(x, y)
 z$cluster <- ifelse(z$cluster == 1, "Cluster 1", "Cluster 2")
 meanz <- rbind(meanx, meany)
 meanz$cluster <- ifelse(meanz$cluster == 1, "Cluster 1", "Cluster 2")
+
+meanz2 <- meanz %>%
+  filter(months_sampled == 3) %>%
+  group_by(cluster, sampling_start) 
 
 cum_prob_plots <- ggplot() +
   geom_line(data = z, aes(x = months_sampled, y = prob_detect, group = interaction(id, sampling_start), 
