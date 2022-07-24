@@ -25,17 +25,47 @@ unregister_dopar <- function() {
 ##                                                                                                   ##
 #######################################################################################################
 ts_metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
-envt_variables <- read.csv(here("data", "environmental_covariates", "location_ecological_data.csv")) %>%
+raw_envt_variables <- read.csv(here("data", "environmental_covariates", "location_ecological_data.csv")) %>%
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
   group_by(id, country, admin1, admin2) %>%
   summarise(across(population_per_1km:mean_temperature_driest_quarter, ~ mean(.x, na.rm = TRUE)))
+
+# aggregating LC variables into their top level values
+envt_variables <- raw_envt_variables %>%
+  mutate(LC_10 = LC_10 + LC_11 + LC_12) %>%
+  dplyr::select(-LC_11, -LC_12) %>%
+  mutate(LC_120 = LC_120 + LC_121 + LC_122) %>%
+  dplyr::select(-LC_121, -LC_122) %>%
+  mutate(LC_60 = LC_60 + LC_61 + LC_62) %>%
+  dplyr::select(-LC_61, -LC_62) %>%
+  mutate(LC_70 = LC_70 + LC_71) %>%
+  dplyr::select(-LC_71) %>%
+  mutate(LC_150 = LC_152 + LC_153) %>%
+  dplyr::select(-LC_152, -LC_153) %>%
+  mutate(LC_200 = LC_200 + LC_201 + LC_202) %>%
+  dplyr::select(-LC_201, -LC_202)
+
+# colnames(raw_envt_variables)[grep("LC*", colnames(raw_envt_variables))]
+# colnames(envt_variables)[grep("LC*", colnames(envt_variables))]
+
 cluster_membership <- readRDS(here("data", "systematic_review_results", "cluster_membership.rds"))
 cluster_membership <- cluster_membership[, c("id", "cluster")]
 overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
 overall <- overall %>%
   left_join(cluster_membership, by = "id")
-#table(overall$cluster, overall$peaks)
+
+# Adding monthly catch in
+counts <- readRDS(here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds")) %>%
+  dplyr::select(id, Jan:Dec) %>%
+  pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "catch") %>%
+  group_by(id) %>%
+  summarise(n_months = sum(!is.na(catch)),
+            monthly_catch = log(sum(catch, na.rm = TRUE)/n_months))
+overall <- overall %>%
+  left_join(counts, by = "id") %>%
+  dplyr::select(-n_months)
+
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -45,8 +75,10 @@ overall <- overall %>%
 #######################################################################################################
 # Subsetting Outcome and Variables for Analysis + Log_10'ing Population (Easier for Visualisation Later On)
 set.seed(234)
-data <- overall %>% # need to figure out whether to do rf_train or data here 
-  dplyr::select(cluster, country, population_per_1km:mean_temperature_driest_quarter, -LC_190, -LC_210, -mean_temperature_driest_quarter) %>% # LC190 is urban so correlated v strong with PopPer1km
+data <- overall %>% 
+  dplyr::select(cluster, country, rainfall_seas_3, monthly_catch, 
+                population_per_1km:mean_temperature_driest_quarter,
+                -LC_190, -elevation) %>% # LC190 is urban so correlated v strong with PopPer1km
   mutate(country = case_when((country == "Afghanistan" | country == "Djibouti" | 
                                 country == "Myanmar" | country == "Pakistan") ~ "aOther",
                              TRUE ~ country)) %>%
@@ -54,7 +86,7 @@ data <- overall %>% # need to figure out whether to do rf_train or data here
   mutate(country_peaks = paste0(cluster, "_", country))
 data$cluster <- ifelse(data$cluster == 1, "one", "two")
 data$cluster <- as.factor(data$cluster)
-data$population_per_1km <- log(data$population_per_1km)
+data$population_per_1km <- log(data$population_per_1km + 1)
 
 # Storage Tibble for Results
 iterations <- tibble(seed = 1, model = list(1), iteration = 1, juiced = list(1), best_mtry = 1, best_min_n = 1,
@@ -89,10 +121,10 @@ for (i in 1:number_iterations) {
   # Prepping Data - Selecting Variables, Creating Recipe - No Upsampling
   envt_recipe <- recipe(cluster  ~ ., data = rf_train) %>%
     update_role(country_peaks, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
-    step_center(all_numeric()) %>% 
-    step_scale(all_numeric()) %>%
+    #step_center(all_numeric()) %>% 
+    #step_scale(all_numeric()) %>%
     step_nzv(all_numeric(), freq_cut = 8, unique_cut = 25) %>% # remove variables that are sparse and unbalanced - remove where >80% of variable values are same value
-    step_corr(all_numeric(), -contains(c("population_per_1km", "temperature_seasonality", "precipitation_seasonality_cv")), threshold = 0.50) %>%
+    step_corr(all_numeric(), -contains(c("population_per_1km", "temperature_seasonality", "rainfall_seas_3", "monthly_catch")), threshold = 0.50) %>%
     step_dummy(country)
   envt_prepped <- prep(envt_recipe, training = rf_train, verbose = TRUE)
   juiced <- juice(envt_prepped)
@@ -103,10 +135,10 @@ for (i in 1:number_iterations) {
   set.seed(seed)
   envt_recipe_ups <- recipe(cluster  ~ ., data = rf_train) %>%
     update_role(country_peaks, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
-    step_center(all_numeric()) %>% 
-    step_scale(all_numeric()) %>%
+    # step_center(all_numeric()) %>% 
+    # step_scale(all_numeric()) %>%
     step_nzv(all_numeric(), freq_cut = 8, unique_cut = 25) %>% # remove variables that are sparse and unbalanced - remove where >80% of variable values are same value
-    step_corr(all_numeric(), -contains(c("population_per_1km", "temperature_seasonality", "precipitation_seasonality_cv")), threshold = 0.50) %>%
+    step_corr(all_numeric(), -contains(c("population_per_1km", "temperature_seasonality", "rainfall_seas_3", "monthly_catch")), threshold = 0.50) %>%
     step_dummy(country) %>%
     step_smote(cluster)
   envt_prepped_ups <- prep(envt_recipe_ups, training = rf_train, verbose = TRUE)
@@ -284,12 +316,12 @@ for (i in 1:number_iterations) {
   
 }
 
-saveRDS(iterations, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_SubsetData.rds")))
-saveRDS(iterations_ups, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_SubsetData.rds")))
+saveRDS(iterations, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_ProperRainSeasSubsetData.rds")))
+saveRDS(iterations_ups, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_ProperRainSeasSubsetData.rds")))
 
 # Loading in Data and Creating Dataframe of Outputs
-rf_no_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_NoUpsampling_SubsetData.rds"))
-rf_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_SubsetData.rds"))
+rf_no_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_NoUpsampling_ProperRainSeasSubsetData.rds"))
+rf_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_ProperRainSeasSubsetData.rds"))
 for (i in 1:length(rf_no_ups_subset$test_roc_curve)) {
   temp <- rf_no_ups_subset$test_roc_curve[[i]]
   temp_ups <- rf_ups_subset$test_roc_curve[[i]]
@@ -329,11 +361,7 @@ imp <- no_ups_df %>%
             num_times_inc = n())
 imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
 var_names <- imp$Variable[order(imp$mean_Importance)]
-new_names <- c("Study\nfrom\nIndia", "LC12", "LC180", "LC150", 
-               "LC11", "Study\nfrom\nIran", "Temp.\nSeasonality", "LC122", "LC130", 
-               "Rain\nColdest\nQuarter", "LC110", "LC100", "Rain.\nDriest\nMonth", 
-               "Rain.\nSeasonality", "LC120", "LC20", "LC170", "LC200","LC201", 
-               "LC40", "Population\nPer\nSquare Km", "LC30", "LC10") #### CHECK THESE NAMES #####
+new_names <- var_names
 importance_noUps_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                                                     fill = mean_Importance)) +
   geom_bar(stat = "identity") +
@@ -373,11 +401,7 @@ imp <- ups_df %>%
             num_times_inc = n())
 imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
 var_names <- imp$Variable[order(imp$mean_Importance)]
-new_names <- c("LC12", "Study\nfrom\nIndia", "LC180", "LC130", "LC150", 
-               "LC11", "LC100", "Rain\nColdest\nQuarter", "Rain.\nSeasonality",
-               "LC122", "LC120", "LC20", "LC110", "LC200", "LC40",
-               "Temp.\nSeasonality", "Study\nfrom\nIran", "LC10", "LC170",
-               "Rain.\nDriest\nMonth","LC30", "Population\nPer\nSquare Km", "LC201") #### CHECK THESE NAMES ##### 
+new_names <- var_names
 importance_Ups_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                                                   fill = mean_Importance)) +
   geom_bar(stat = "identity") +
@@ -394,4 +418,4 @@ importance_Ups_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Imp
 
 Ups_Supp_Plot_SubsetData <- cowplot::plot_grid(ups_subset_AUC, importance_Ups_SubsetData_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
 subset_data_plot <- cowplot::plot_grid(noUps_Supp_Plot_SubsetData, Ups_Supp_Plot_SubsetData, nrow  = 2)
-ggsave(filename = here("figures/Supp_Figure_Subset_AUC_VIP.pdf"), plot = subset_data_plot, width = 16, height = 10)
+ggsave(filename = here("figures/Supp_Fig7_SubsetEval_AUC_VIP.pdf"), plot = subset_data_plot, width = 16, height = 10)

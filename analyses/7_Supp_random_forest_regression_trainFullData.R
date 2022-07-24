@@ -25,12 +25,46 @@ unregister_dopar <- function() {
 ##                                                                                                   ##
 #######################################################################################################
 ts_metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
-envt_variables <- read.csv(here("data", "environmental_covariates", "location_ecological_data.csv")) %>%
+raw_envt_variables <- read.csv(here("data", "environmental_covariates", "location_ecological_data.csv")) %>%
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
   group_by(id, country, admin1, admin2) %>%
   summarise(across(population_per_1km:mean_temperature_driest_quarter, ~ mean(.x, na.rm = TRUE)))
+
+# aggregating LC variables into their top level values
+envt_variables <- raw_envt_variables %>%
+  mutate(LC_10 = LC_10 + LC_11 + LC_12) %>%
+  dplyr::select(-LC_11, -LC_12) %>%
+  mutate(LC_120 = LC_120 + LC_121 + LC_122) %>%
+  dplyr::select(-LC_121, -LC_122) %>%
+  mutate(LC_60 = LC_60 + LC_61 + LC_62) %>%
+  dplyr::select(-LC_61, -LC_62) %>%
+  mutate(LC_70 = LC_70 + LC_71) %>%
+  dplyr::select(-LC_71) %>%
+  mutate(LC_150 = LC_152 + LC_153) %>%
+  dplyr::select(-LC_152, -LC_153) %>%
+  mutate(LC_200 = LC_200 + LC_201 + LC_202) %>%
+  dplyr::select(-LC_201, -LC_202)
+
+# colnames(raw_envt_variables)[grep("LC*", colnames(raw_envt_variables))]
+# colnames(envt_variables)[grep("LC*", colnames(envt_variables))]
+
+cluster_membership <- readRDS(here("data", "systematic_review_results", "cluster_membership.rds"))
+cluster_membership <- cluster_membership[, c("id", "cluster")]
 overall <- ts_metadata %>%
   left_join(envt_variables, by = c("id", "country", "admin1", "admin2"))
+overall <- overall %>%
+  left_join(cluster_membership, by = "id")
+
+# Adding monthly catch in
+counts <- readRDS(here("data", "systematic_review_results", "metadata_and_processed_unsmoothed_counts.rds")) %>%
+  dplyr::select(id, Jan:Dec) %>%
+  pivot_longer(cols = Jan:Dec, names_to = "month", values_to = "catch") %>%
+  group_by(id) %>%
+  summarise(n_months = sum(!is.na(catch)),
+            monthly_catch = log(sum(catch, na.rm = TRUE)/n_months))
+overall <- overall %>%
+  left_join(counts, by = "id") %>%
+  dplyr::select(-n_months)
 
 #######################################################################################################
 ##                                                                                                   ##
@@ -41,7 +75,9 @@ overall <- ts_metadata %>%
 # Subsetting Outcome and Variables for Analysis + Log_10'ing Population (Easier for Visualisation Later On)
 set.seed(234)
 data <- overall %>% # need to figure out whether to do rf_train or data here 
-  dplyr::select(per_ind_3_months, country, population_per_1km:mean_temperature_driest_quarter, -LC_190, -LC_210, -mean_temperature_driest_quarter) %>% # LC190 is urban so correlated v strong with PopPer1km
+  dplyr::select(per_ind_3_months, country, rainfall_seas_3, monthly_catch, 
+                population_per_1km:mean_temperature_driest_quarter, 
+                -LC_190, -elevation) %>% # LC190 is urban so correlated v strong with PopPer1km
   mutate(country = case_when((country == "Afghanistan" | country == "Djibouti" | 
                                 country == "Myanmar" | country == "Pakistan") ~ "aOther",
                              TRUE ~ country)) %>%
@@ -68,10 +104,10 @@ for (i in 1:number_iterations) {
   # Prepping Data - Selecting Variables, Creating Recipe - No Upsampling
   envt_recipe <- recipe(per_ind_3_months  ~ ., data = data) %>%
     update_role(country2, new_role = "ID") %>% # retained in the data, but not used for model fitting. Role = "predictor", "id" or "outcome" - used differently in model. 
-    step_center(all_numeric(), -per_ind_3_months) %>% 
-    step_scale(all_numeric(), -per_ind_3_months) %>%
+    #step_center(all_numeric(), -per_ind_3_months) %>% 
+    #step_scale(all_numeric(), -per_ind_3_months) %>%
     step_nzv(all_numeric(), -per_ind_3_months, freq_cut = 8, unique_cut = 25) %>% # remove variables that are sparse and unbalanced - remove where >80% of variable values are same value
-    step_corr(all_numeric(), -per_ind_3_months, -contains(c("population_per_1km", "temperature_seasonality", "precipitation_seasonality_cv")), threshold = 0.50) %>%
+    step_corr(all_numeric(), -per_ind_3_months, -contains(c("population_per_1km", "temperature_seasonality", "rainfall_seas_3", "monthly_catch")), threshold = 0.50) %>%
     step_dummy(country)
   envt_prepped <- prep(envt_recipe, training = data, verbose = TRUE)
   juiced <- juice(envt_prepped)

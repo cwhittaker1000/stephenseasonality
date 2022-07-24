@@ -25,7 +25,6 @@ unregister_dopar <- function() {
 ##                                                                                                   ##
 #######################################################################################################
 ts_metadata <- readRDS(here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
-
 raw_envt_variables <- read.csv(here("data", "environmental_covariates", "location_ecological_data.csv")) %>%
   rename(id = Time.Series.ID, country = Country, admin1 = Admin.1, admin2 = Admin.2) %>%
   group_by(id, country, admin1, admin2) %>%
@@ -46,8 +45,8 @@ envt_variables <- raw_envt_variables %>%
   mutate(LC_200 = LC_200 + LC_201 + LC_202) %>%
   dplyr::select(-LC_201, -LC_202)
 
-colnames(raw_envt_variables)[grep("LC*", colnames(raw_envt_variables))]
-colnames(envt_variables)[grep("LC*", colnames(envt_variables))]
+# colnames(raw_envt_variables)[grep("LC*", colnames(raw_envt_variables))]
+# colnames(envt_variables)[grep("LC*", colnames(envt_variables))]
 
 cluster_membership <- readRDS(here("data", "systematic_review_results", "cluster_membership.rds"))
 cluster_membership <- cluster_membership[, c("id", "cluster")]
@@ -67,7 +66,6 @@ overall <- overall %>%
   left_join(counts, by = "id") %>%
   dplyr::select(-n_months)
 
-
 #######################################################################################################
 ##                                                                                                   ##
 ##                      Setting Up All The Components Required to Run the Model                      ##
@@ -76,7 +74,7 @@ overall <- overall %>%
 #######################################################################################################
 # Subsetting Outcome and Variables for Analysis + Log_10'ing Population (Easier for Visualisation Later On)
 set.seed(234)
-data <- overall %>% # need to figure out whether to do rf_train or data here 
+data <- overall %>% 
   dplyr::select(cluster, country, rainfall_seas_3, monthly_catch, 
                 population_per_1km:mean_temperature_driest_quarter,
                 -LC_190, -elevation) %>% # LC190 is urban so correlated v strong with PopPer1km
@@ -331,19 +329,9 @@ for (i in 1:length(no_ups$test_roc_curve)) {
   }
 }
 
-# Plotting AUC and RF Results for Upsampled 
-AUC_upsample_plot <- ggplot(df_ups, aes(x = 1-specificity, y = sensitivity, id = factor(iteration))) +
-  geom_path(alpha = 0.5) +
-  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
-  xlab("1 - Specificity") +
-  ylab("Sensitivity") +
-  theme_bw() +
-  theme(legend.position = "none") +
-  annotate("label", x = 0.67, y = 0.07,
-           label = paste0("Mean AUC = ", round(mean(ups$test_roc_auc), 2)),
-           label.padding = unit(0.35, "lines"), label.r = unit(0, "lines"),
-           label.size = unit(0.35, "lines"), size = 4)
+# Plotting Upsampled RF VIP and Covariate Profiles for Fig 2
 
+## Variable Importance Plot
 importance_upsample <- bind_rows(ups$importance)
 importance_upsample <- importance_upsample %>%
   group_by(Variable) %>%
@@ -353,25 +341,36 @@ importance_upsample <- importance_upsample %>%
 importance_upsample$lower <- pmax(rep(0, length(importance_upsample$mean_Importance)), 
                                   importance_upsample$mean_Importance - 1.96 * importance_upsample$stdev_Importance)
 var_names_ups <- importance_upsample$Variable[order(importance_upsample$mean_Importance)]
+var_names_ups <- gsub("LC_", "LC", var_names_ups)
+var_names_ups <- gsub("country_", "Study from ", var_names_ups)
+var_names_ups <- gsub("_", " ", var_names_ups)
+var_names_ups <- str_to_title(var_names_ups)
+var_names_ups <- gsub("Lc", "LC", var_names_ups)
+var_names_ups <- gsub("Monthly Catch", "Monthly\nCatch", var_names_ups)
+var_names_ups <- gsub("Precipitation Coldest Quarter", "Rain\nColdest\nQuarter", var_names_ups)
+var_names_ups <- gsub("Study From India", "Study\nFrom India", var_names_ups)
+var_names_ups <- gsub("Study From Iran", "Study\nFrom Iran", var_names_ups)
+var_names_ups <- gsub("Monthly Catch", "Monthly\nCatch", var_names_ups)
+var_names_ups <- gsub("Temperature Seasonality", "Temperature\nSeasonality", var_names_ups)
+var_names_ups <- gsub("Annual Mean Temperature", "Annual\nMean\nTemperature", var_names_ups)
+var_names_ups <- gsub("Mean Temperature Driest Quarter", "Mean\nTemperature\nDriest Quarter", var_names_ups)
+var_names_ups <- gsub("Population Per 1km", "Population\nPer Km2", var_names_ups)
 new_names_ups <- var_names_ups
-importance_upsample_plot <- ggplot(importance_upsample, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
-                                                            fill = mean_Importance)) +
+
+importance_upsample_plot <- ggplot(importance_upsample, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, fill = mean_Importance)) +
   geom_bar(stat = "identity") +
   geom_errorbar(aes(ymin = pmax(0, mean_Importance - 1.96 * stdev_Importance),
                     ymax = mean_Importance + 1.96 * stdev_Importance),
                 width = 0.5) +
   scale_x_discrete(labels = new_names_ups) +
-  scale_fill_continuous(low = "grey", high = "#E14545") +
+  scale_fill_continuous(low = "grey", high = "grey") +
   xlab("") + ylab("Variable Importance") +
-  lims(y = c(0, 0.086)) +
+  lims(y = c(0, 0.055)) +
   theme_bw() +
   theme(legend.position = "none",
         axis.text.x = element_text(size = 7))
 
-rf_plot <- cowplot::plot_grid(AUC_upsample_plot, importance_upsample_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
-
-# Supplementary Figure - Upsample PDP and Covariate Profiling Plots
-ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_FullData_ProperRainSeas.rds"))
+## Covariate Profiling Plot
 ups_vip_results <- tibble(id = 1, var = "bloop", x = 1, y = 1)
 for (i in 1:dim(ups)[1]) {
   final_random_forest_fit_ups <- ups$model[[i]]
@@ -385,24 +384,68 @@ for (i in 1:dim(ups)[1]) {
   prof_ups <- pdp_ups$agr_profiles
   df_ups <- data.frame(id = i, var = prof_ups$`_vname_`, x = prof_ups$`_x_`, y = prof_ups$`_yhat_`)
   ups_vip_results <- rbind(ups_vip_results, df_ups)
-  print(i)
 }
 ups_vip_results <- ups_vip_results[-1, ] 
 ups_summary_vip_results <- ups_vip_results %>%
   group_by(var, x) %>%
-  summarise(mean = mean(y),
+  summarise(mean = mean(y), 
             lower = min(y),
             upper = max(y))
+
+### All the covariates
 ups_profile_plots <- ggplot(ups_summary_vip_results, aes(x = x, y = mean, col = var)) +
   geom_line() +
   geom_ribbon(aes(ymin = lower, ymax = upper, fill = var), alpha = 0.2, col = NA) +
   facet_wrap(~var, scale = "free_x") +
   theme_bw() +
-  theme(legend.position = "none") +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white")) +
   labs(x = "Covariate Value", y = "Average Prediction")
-ggsave(filename = here("figures/Supp_Figure_UpsampleProperRainSeas_Covariate_Profiling.pdf"), plot = ups_profile_plots, width = 8, height = 8)
+ggsave(filename = here("figures/Supp_Fig5_Upsample_Covariate_Profiling.pdf"), plot = ups_profile_plots, width = 8, height = 8)
 
-# Plotting No Upsampling AUC
+## Top 5 covariates (not including Iran)
+top_five <- rev(importance_upsample$Variable[order(importance_upsample$mean_Importance)])[1:6]
+top_five <- top_five[-5]
+subset_ups_summary_vip_results <- ups_summary_vip_results %>%
+  filter(var %in% top_five)
+
+cols <- scales::hue_pal()(17)[which(unique(importance_upsample$Variable) %in% top_five)]
+cols <- scales::hue_pal()(17)[c(12, 13, 14, 15, 17)]
+
+show_col(scales::hue_pal()(17))
+show_col(scales::hue_pal()(17)[c(10, 12, 13, 14, 15, 17)])
+show_col(scales::hue_pal()(17)[c(10, 12, 15, 17, 13, 14)])
+
+reord_cols <- scales::hue_pal()(17)[c(12, 15, 17, 13, 14)]
+subset_ups_summary_vip_results$var <- factor(subset_ups_summary_vip_results$var, levels = rev(top_five))
+
+inset_ups_profile_plots <- ggplot(subset_ups_summary_vip_results, aes(x = x, y = mean, col = var)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = var), alpha = 0.2, col = NA) +
+  facet_wrap(~var, scale = "free_x", nrow = 1) +
+  scale_colour_manual(values = reord_cols) +
+  scale_fill_manual(values = reord_cols) +
+  scale_y_continuous(breaks = c(0.4, 0.5, 0.6)) +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white"),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+        axis.title.y = element_text(size = 10),
+        plot.margin = unit(c(0,0,0,0), "npc")) +
+  labs(x = "Covariate Value", y = "Average Prediction")
+
+fig2_pt2 <- importance_upsample_plot + 
+  annotation_custom(ggplotGrob(inset_ups_profile_plots), 
+    xmin = 0.5, xmax = 14, ymin = 0.0320, ymax = 0.057)
+ggsave(filename = here("figures/Fig2_Part2_Raw.pdf"), 
+       plot = fig2_pt2,
+       device = "pdf",
+       width = 10.8, height = 3.25)
+
+# Plotting Rersults for No Upsampling of Cluster 2 Data
 no_ups_AUC <- ggplot(df, aes(x = 1-specificity, y = sensitivity, id = factor(iteration))) +
   geom_path(alpha = 0.5) +
   geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), col = "black", lty = 2) +
@@ -433,15 +476,12 @@ importance_noUps_plot <- ggplot(no_ups_imp, aes(x = reorder(Variable, mean_Impor
   scale_x_discrete(labels = no_ups_new_names) +
   scale_fill_continuous(low = "grey", high = "#E14545") +
   xlab("") + ylab("Variable Importance") +
-  lims(y = c(0, 0.065)) +
+  lims(y = c(0, 0.034)) +
   theme_bw() +
   theme(legend.position = "none",
         axis.text.x = element_text(size = 7))
 
 noUps_Supp_Plot <- cowplot::plot_grid(no_ups_AUC, importance_noUps_plot, nrow = 1, ncol = 2, rel_widths = c(1, 2), align = "h", axis = "b")
-noUps_Supp_Plot
-ggsave(filename = here("figures/Supp_Figure_AUC_VIP_NoUps.pdf"), plot = noUps_Supp_Plot, width = 12, height = 5)
-
 
 no_ups <- readRDS(here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_FullData_ProperRainSeas.rds"))
 no_ups_vip_results <- tibble(id = 1, var = "bloop", x = 1, y = 1)
@@ -468,7 +508,13 @@ no_ups_summary_vip_results <- no_ups_vip_results %>%
 no_ups_profile_plots <- ggplot(no_ups_summary_vip_results, aes(x = x, y = mean, col = var)) +
   geom_line() +
   geom_ribbon(aes(ymin = lower, ymax = upper, fill = var), alpha = 0.2, col = NA) +
-  facet_wrap(~var, scale = "free_x") +
+  facet_wrap(~var, scale = "free_x", ncol = 6) +
   theme_bw() +
-  theme(legend.position = "none") +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white")) +
   labs(x = "Covariate Value", y = "Average Prediction")
+
+no_ups_profile_plots
+noUps_Supp_Plot_Comp <- cowplot::plot_grid(noUps_Supp_Plot, no_ups_profile_plots, nrow = 2,
+                                           rel_heights = c(1, 2))
+ggsave(filename = here("figures/Supp_Fig6_NoUpsampling_AUC_VIP.pdf"), plot = noUps_Supp_Plot_Comp, width = 12, height = 10)
