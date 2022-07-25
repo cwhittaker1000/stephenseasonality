@@ -320,7 +320,7 @@ saveRDS(iterations, file = paste0(here("outputs", "random_forest_outputs", "repe
 saveRDS(iterations_ups, file = paste0(here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_ProperRainSeasSubsetData.rds")))
 
 # Loading in Data and Creating Dataframe of Outputs
-rf_no_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_NoUpsampling_ProperRainSeasSubsetData.rds"))
+rf_no_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_noUpsampling_ProperRainSeasSubsetData.rds"))
 rf_ups_subset <- readRDS(file = here("outputs", "random_forest_outputs", "repeated_rf_Upsampling_ProperRainSeasSubsetData.rds"))
 for (i in 1:length(rf_no_ups_subset$test_roc_curve)) {
   temp <- rf_no_ups_subset$test_roc_curve[[i]]
@@ -362,6 +362,12 @@ imp <- no_ups_df %>%
 imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
 var_names <- imp$Variable[order(imp$mean_Importance)]
 new_names <- var_names
+new_names <- gsub("C_", "C", new_names)
+new_names <- gsub("_", "\n", new_names)
+new_names <- gsub("itation", ".", new_names)
+new_names <- gsub("seasonality", "seas.", new_names)
+new_names <- gsub("temperature", "temp.", new_names)
+new_names <- gsub("population", "pop.", new_names)
 importance_noUps_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                                                     fill = mean_Importance)) +
   geom_bar(stat = "identity") +
@@ -402,6 +408,12 @@ imp <- ups_df %>%
 imp$lower <- pmax(rep(0, length(imp$mean_Importance)), imp$mean_Importance - 1.96 * imp$stdev_Importance)
 var_names <- imp$Variable[order(imp$mean_Importance)]
 new_names <- var_names
+new_names <- gsub("C_", "C", new_names)
+new_names <- gsub("_", "\n", new_names)
+new_names <- gsub("itation", ".", new_names)
+new_names <- gsub("seasonality", "seas.", new_names)
+new_names <- gsub("temperature", "temp.", new_names)
+new_names <- gsub("population", "pop.", new_names)
 importance_Ups_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Importance), y = mean_Importance, 
                                                   fill = mean_Importance)) +
   geom_bar(stat = "identity") +
@@ -411,7 +423,7 @@ importance_Ups_SubsetData_plot <- ggplot(imp, aes(x = reorder(Variable, mean_Imp
   scale_x_discrete(labels = new_names) +
   scale_fill_continuous(low = "grey", high = "#E14545") +
   xlab("") + ylab("Variable Importance") +
-  lims(y = c(0, 0.23)) +
+  lims(y = c(0, 0.1)) +
   theme_bw() +
   theme(legend.position = "none",
         axis.text.x = element_text(size = 7))

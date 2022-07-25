@@ -162,8 +162,8 @@ for (i in 1:number_iterations) {
   fit_OOS_preds <- final_random_forest_fit$fit$fit$fit$predictions
   fit_OOS_preds_df <- data.frame(truth = juiced$per_ind_3_months, estimate = fit_OOS_preds)
   test_rmse <- sqrt(sum((fit_OOS_preds_df$truth - fit_OOS_preds_df$estimate)^2)/length(fit_OOS_preds_df$truth))
-  #plot(fit_OOS_preds_df$truth, fit_OOS_preds_df$estimate, xlim = c(0, 1), ylim = c(0, 1)) 
-  #lines(c(0, 1), c(0, 1), lty = "dashed")
+  plot(fit_OOS_preds_df$truth, fit_OOS_preds_df$estimate, xlim = c(0, 1), ylim = c(0, 1)) 
+  lines(c(0, 1), c(0, 1), lty = "dashed")
 
   # Calculating variable importance
   var_imp <- extract_fit_parsnip(final_random_forest_fit) %>%
@@ -189,9 +189,9 @@ for (i in 1:number_iterations) {
   
 }
 
-saveRDS(iterations, file = paste0(here("outputs", "random_forest_outputs", "regresstion_repeated_rf_FullData.rds")))
+saveRDS(iterations, file = paste0(here("outputs", "random_forest_outputs", "regresstion_repeated_rf_FullData_ProperRainSeas.rds")))
 
-no_ups <- readRDS(here("outputs", "random_forest_outputs", "regresstion_repeated_rf_FullData.rds"))
+no_ups <- readRDS(here("outputs", "random_forest_outputs", "regresstion_repeated_rf_FullData_ProperRainSeas.rds"))
 no_ups_vip_results <- tibble(id = 1, var = "bloop", x = 1, y = 1)
 for (i in 1:dim(no_ups)[1]) {
   final_random_forest_fit <- no_ups$model[[i]]
@@ -262,5 +262,5 @@ preds_plot <- ggplot(pred_df, aes(x = Prediction, y = Actual)) +
 cor(mean_pred, juiced$per_ind_3_months)
 
 rf_reg_plot <- cowplot::plot_grid(preds_plot, var_imp_plot, nrow = 2, ncol = 1, rel_widths = c(0.66, 2), align = "h", axis = "b")
-ggsave(filename = here("figures/Supp_Figure_RF_Regression.pdf"), plot = rf_reg_plot, width = 6.5, height = 6)
+ggsave(filename = here("figures/Supp_Fig8_RF_Regression.pdf"), plot = rf_reg_plot, width = 6.5, height = 6)
 
