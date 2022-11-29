@@ -518,3 +518,114 @@ no_ups_profile_plots
 noUps_Supp_Plot_Comp <- cowplot::plot_grid(noUps_Supp_Plot, no_ups_profile_plots, nrow = 2,
                                            rel_heights = c(1, 2))
 ggsave(filename = here("figures/Supp_Fig6_NoUpsampling_AUC_VIP.pdf"), plot = noUps_Supp_Plot_Comp, width = 12, height = 10)
+
+# Plotting Urban and Rural Time-Series
+# Extracting Mean Realisation for Each Time-Series
+interpolating_points <- 2
+urban_rural <- overall$city
+features_df <- readRDS(file = here("data", "systematic_review_results", "metadata_and_time_series_features.rds"))
+mean_realisation <- matrix(nrow = dim(overall)[1], ncol = (12 * interpolating_points + 1))
+prior <- "informative"
+for (i in 1:length(overall$id)) {
+  
+  index <- overall$id[i]
+  # Loading in and processing the fitted time-series
+  if (prior == "informative") {
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/informative"), "/inf_periodic_fit_", index, ".rds"))
+  } else if (prior == "uninformative") {
+    STAN_output <- readRDS(paste0(here("outputs/neg_binom_gp_fitting/uninformative/"), "/uninf_periodic_fit_", index, ".rds"))
+  }
+  # Extracting the mean fitted time-series
+  timepoints <- STAN_output$timepoints
+  all_timepoints <- STAN_output$all_timepoints
+  ordered_timepoints <- all_timepoints[order(all_timepoints)]
+  MCMC_output <- STAN_output$chain_output
+  f <- MCMC_output[, grepl("f", colnames(MCMC_output))]
+  f_mean <- apply(f, 2, mean)
+  negbinom_intensity_mean <- as.numeric(exp(f_mean)[order(all_timepoints)])
+  mean_realisation[i, ] <- negbinom_intensity_mean
+  
+}
+normalised_output <- t(apply(mean_realisation, 1, normalise_total))
+
+# Calculating Degree of Seasonality, Time to 2% Etc
+seasonality <- c()
+for (i in 1:(dim(normalised_output)[1])) {
+  seasonality <- c(seasonality, calc_incidence_seasonality(normalised_output[i, ], 4))
+}
+
+# Extracting and Standardising (By Peak Timing) Dynamics By Rural/Urban Stratification
+table(urban_rural, overall$peaks)
+
+urban <- normalised_output[urban_rural == "Urban", ]
+urban_start_index <- apply(urban, 1, function(x) which(x == max(x)))
+urban_mat <- matrix(nrow = dim(urban)[1], ncol = dim(urban)[2])
+urban_end <- dim(urban)[2]
+for (i in 1:dim(urban)[1]) {
+  urban_mat[i, ] <- urban[i, c(urban_start_index[i]:urban_end, 1:(urban_start_index[i]-1))]
+}
+urban_mat <- urban_mat[, c(13:25, 1:12)]
+urban_df <- data.frame(id = seq(1:(dim(urban_mat)[1])), setting = "urban", urban_mat)
+
+rural_one <- normalised_output[urban_rural == "Rural" & features_df$peaks == 1, ]
+rural_one_start_index <- apply(rural_one, 1, function(x) which(x == max(x)))
+rural_one_mat <- matrix(nrow = dim(rural_one)[1], ncol = dim(rural_one)[2])
+rural_one_end <- dim(rural_one)[2]
+for (i in 1:dim(rural_one)[1]) {
+  rural_one_mat[i, ] <- rural_one[i, c(rural_one_start_index[i]:rural_one_end, 1:(rural_one_start_index[i]-1))]
+}
+rural_one_mat <- rural_one_mat[, c(13:25, 1:12)]
+rural_one_df <- data.frame(id = seq(1:(dim(rural_one_mat)[1])), setting = "rural_one", rural_one_mat)
+
+rural_two <- normalised_output[urban_rural == "Rural" & features_df$peaks == 2, ]
+rural_two_start_index <- apply(rural_two, 1, function(x) which(x == max(x)))
+rural_two_mat <- matrix(nrow = dim(rural_two)[1], ncol = dim(rural_two)[2])
+rural_two_end <- dim(rural_two)[2]
+for (i in 1:dim(rural_two)[1]) {
+  rural_two_mat[i, ] <- rural_two[i, c(rural_two_start_index[i]:rural_two_end, 1:(rural_two_start_index[i]-1))]
+}
+rural_two_mat <- rural_two_mat[, c(17:25, 1:16)]
+rural_two_df <- data.frame(id = seq(1:(dim(rural_two_mat)[1])), setting = "rural_two", rural_two_mat)
+
+summary_df <- rbind(urban_df, rural_one_df, rural_two_df) %>%
+  pivot_longer(cols = X1:X25, names_to = "timepoint", values_to = "density") %>%
+  mutate(timepoint = as.numeric(gsub("X", "", timepoint))) %>%
+  group_by(setting, timepoint) %>%
+  summarise(mean_dens = mean(density),
+            low_dens = quantile(density, 0.10),
+            high_dens = quantile(density, 0.90))
+setting_names <- list('rural_one'="Rural One Peak", 'rural_two'="Rural Two Peak", 'urban'="All Urban")
+setting_labeller <- function(variable, value){
+  return(setting_names[value])
+}
+setting_seasonalities <- data.frame(setting = c("rural_one", "rural_two", "urban"),
+                                    seasonality = c(mean(seasonality[urban_rural == "Rural" & features_df$peaks == 1]),
+                                                    mean(seasonality[urban_rural == "Rural" & features_df$peaks == 2]),
+                                                    mean(seasonality[urban_rural == "Urban"])))
+urban_rural_ts <- ggplot(summary_df, aes(x = timepoint, y = mean_dens , col = setting)) +
+  geom_path(size = 1.5) +
+  geom_ribbon(aes(ymin = low_dens, ymax = high_dens, fill = setting), alpha = 0.2, colour = NA) +
+  scale_color_manual(values = c("#447604", "#6EA65D","#807A85")) +
+  scale_fill_manual(values = c("#447604", "#6EA65D", "#807A85")) +
+  facet_wrap(~setting, nrow = 1, labeller = setting_labeller) +
+  theme_bw() +
+  scale_x_continuous(breaks = c(0, 2*25/12, 4*25/12, 6*25/12, 8*25/12, 10*25/12, 12*25/12),
+                     labels = c(0, 2, 4, 6, 8, 10, 12)) +
+  labs(y = "Normalised Vector Density", x = "Peak Standardised Timing (Months)") +
+  theme(legend.position = "none",
+        plot.margin = unit(c(0.5, 0.5, 0.5, 0), "cm"),
+        strip.background = element_rect(fill = "white")) +
+  geom_label(data = setting_seasonalities, x = 0.5, y = 0.19,
+             label = paste0("Mean\nSeasonality = ", round(setting_seasonalities$seasonality, 2)),
+             fill = "white", label.size = NA,
+             size = 5,
+             hjust = 0)
+
+urban <- seasonality[urban_rural == "Urban"]
+rural_one <- seasonality[urban_rural == "Rural" & features_df$peaks == 1]
+t.test(urban, rural_one)
+
+mean(urban)
+mean(rural_one)
+
+ggsave(filename = here("figures/NewSupp_Fig10_Rural_Urban_Plotting.pdf"), plot = urban_rural_ts, width = 12, height = 5)
